@@ -112,6 +112,7 @@ uniform int   u_palette;
 uniform int   u_fracType;   // 0 = complex, 1 = quaternion
 uniform vec4  u_qc;         // quaternion c constant
 uniform float u_threshold;  // controls opacity ramp width
+uniform int   u_jitter;    // 0 = centered sampling, 1 = dithered
 
 // ── Escape time (for opacity — reliable with fixed steps) ──
 float juliaEscape(vec3 pos) {
@@ -249,8 +250,14 @@ void main() {
     bool surfaceFound = false;
     vec3 litColor = vec3(0.0);
 
+    // Per-pixel sampling offset: centered (0.5) or dithered (random)
+    float offset = 0.5;
+    if (u_jitter == 1)
+        offset = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+
     for (int i = 0; i < u_numSteps; i++) {
-        float t = tt.x + (float(i) + 0.5) * dt;
+        float t = tt.x + (float(i) + offset) * dt;
+        if (t > tt.y) break;
         vec3 pos = ro + t * rd;
 
         float fi = juliaEscape(pos);
@@ -378,6 +385,7 @@ struct AppState {
     float renderScale = 0.5f;
     int   fracType    = 0;   // 0 = Complex (4D z+c), 1 = Quaternion
     float qc[4]      = {-0.2f, 0.8f, 0.0f, 0.0f};  // quaternion c constant
+    bool  jitter     = false;  // dither ray sampling to reduce banding
 
     float fps = 0.0f;
 };
@@ -766,6 +774,8 @@ static void drawUI(AppState& s, int winW, int winH) {
         ImGui::SliderInt("Steps", &s.numSteps, 32, 300);
         ImGui::SliderFloat("Surface", &s.threshold, 0.1f, 0.95f, "%.2f");
         ImGui::SliderFloat("Scale", &s.renderScale, 0.2f, 1.0f);
+        ImGui::Checkbox("Dither", &s.jitter);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Randomize ray sampling to reduce banding");
     }
 
     ImGui::Combo("Palette", &s.palette, kPalNames, kNumPalettes);
@@ -1079,6 +1089,7 @@ int main(int argc, char** argv) {
     GLint u3d_threshold = glGetUniformLocation(prog3d, "u_threshold");
     GLint u3d_fracType  = glGetUniformLocation(prog3d, "u_fracType");
     GLint u3d_qc        = glGetUniformLocation(prog3d, "u_qc");
+    GLint u3d_jitter    = glGetUniformLocation(prog3d, "u_jitter");
 
     // ----- Geometry -----
     GLuint quadVAO = createQuadVAO();
@@ -1125,6 +1136,7 @@ int main(int argc, char** argv) {
         glUniform1f(u3d_threshold, state.threshold);
         glUniform1i(u3d_fracType, state.fracType);
         glUniform4fv(u3d_qc, 1, state.qc);
+        glUniform1i(u3d_jitter, state.jitter ? 1 : 0);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
         glFinish();
 
@@ -1265,6 +1277,7 @@ int main(int argc, char** argv) {
             glUniform1f(u3d_threshold, state.threshold);
             glUniform1i(u3d_fracType, state.fracType);
             glUniform4fv(u3d_qc, 1, state.qc);
+            glUniform1i(u3d_jitter, state.jitter ? 1 : 0);
             glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
             // Blit FBO to default framebuffer
