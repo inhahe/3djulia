@@ -30,6 +30,7 @@ body { background: #060610; color: #bbb; font-family: 'Consolas', 'Menlo', 'Mona
 .hl  { color: #aaa; }
 .hv  { color: #5cf; }
 .hp  { color: #fa0; }
+.hf  { color: #f6a; }
 .hdim { color: #556; }
 .hfps { color: #4a4; }
 .hkey { color: #0cf; }
@@ -50,11 +51,13 @@ body { background: #060610; color: #bbb; font-family: 'Consolas', 'Menlo', 'Mona
 
 /* ── Presets ── */
 #presets { position: fixed; bottom: 12px; left: 14px; display: flex; flex-wrap: wrap;
-           gap: 5px; z-index: 10; }
+           gap: 5px; z-index: 10; max-width: calc(100vw - 220px); }
 #presets button { background: rgba(18,18,36,.85); color: #889; border: 1px solid #334;
                   padding: 4px 10px; border-radius: 5px; cursor: pointer; font: inherit;
                   font-size: 11.5px; transition: all .15s; }
 #presets button:hover { background: #2a2a4e; color: #def; border-color: #556; }
+#presets button.qp { border-color: #424; color: #a7a; }
+#presets button.qp:hover { background: #2e1a3e; color: #e8d; border-color: #648; }
 
 /* ── Quality badge ── */
 #quality-badge { position: fixed; bottom: 12px; right: 14px; font-size: 11px; color: #889;
@@ -62,7 +65,7 @@ body { background: #060610; color: #bbb; font-family: 'Consolas', 'Menlo', 'Mona
                  background: rgba(6,6,16,.82); padding: 4px 10px; border-radius: 5px; }
 
 /* ── Control Panel ── */
-#panel { position: fixed; top: 10px; right: 12px; width: 192px; z-index: 12;
+#panel { position: fixed; top: 10px; right: 12px; width: 198px; z-index: 12;
          background: rgba(6,6,16,.90); border: 1px solid #223; border-radius: 8px;
          padding: 8px; overflow-y: auto; max-height: calc(100vh - 56px);
          scrollbar-width: thin; scrollbar-color: #334 transparent; }
@@ -81,6 +84,12 @@ body { background: #060610; color: #bbb; font-family: 'Consolas', 'Menlo', 'Mona
 .mbtn.sel[data-mode="2d"] { background: #0a1828; color: #0df; }
 .mbtn.sel[data-mode="3d"] { background: #1a1208; color: #fa0; }
 .mbtn:hover:not(.sel) { background: #151528; color: #aab; }
+/* fractal type */
+.fbtn { flex: 1; padding: 6px 0; border: 1px solid #334; background: #0d0d1a; color: #667;
+        border-radius: 5px; cursor: pointer; font: inherit; font-size: 11px; font-weight: bold;
+        text-align: center; transition: all .15s; }
+.fbtn.sel { background: #1a0a20; color: #d8f; border-color: #748; }
+.fbtn:hover:not(.sel) { background: #151528; color: #aab; }
 /* plane grid */
 .pgrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3px; margin-bottom: 5px; }
 .pbtn { padding: 5px 0; border: 1px solid #1a1a2e; background: #0a0a18; color: #667;
@@ -109,6 +118,18 @@ body { background: #060610; color: #bbb; font-family: 'Consolas', 'Menlo', 'Mona
         border-radius: 3px; cursor: pointer; font: inherit; font-size: 12px; text-align: center; }
 .cbtn:hover { background: #1a1a3a; color: #def; }
 .cbtn:active { background: #2a2a5a; }
+/* slider row (quaternion c) */
+.srow { display: flex; align-items: center; gap: 3px; margin-bottom: 2px; }
+.slbl { font-size: 9px; color: #667; width: 10px; flex-shrink: 0; text-align: center; }
+.sval { font-size: 9.5px; color: #d8f; width: 38px; text-align: right; flex-shrink: 0; }
+input[type="range"] { flex: 1; height: 14px; -webkit-appearance: none; appearance: none;
+  background: #0d0d1a; border-radius: 3px; outline: none; border: 1px solid #1a1a2e;
+  cursor: pointer; }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
+  width: 10px; height: 14px; background: #556; border-radius: 2px; cursor: pointer; }
+input[type="range"]::-webkit-slider-thumb:hover { background: #779; }
+input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: #556;
+  border-radius: 2px; border: none; cursor: pointer; }
 /* bottom buttons */
 .rst { width: 100%; padding: 5px; border: 1px solid #223; background: #0d0d1a; color: #778;
        border-radius: 4px; cursor: pointer; font: inherit; font-size: 11px; transition: all .12s; }
@@ -124,8 +145,8 @@ body { background: #060610; color: #bbb; font-family: 'Consolas', 'Menlo', 'Mona
 
 <div id="help">
   <h2>4D Julia Set Explorer</h2>
-  <p>Explore 2D cross-sections and 3D hyperplane volumes of the 4-dimensional Julia set
-     z &rarr; z&sup2; + c, where (x, y) = z&#8320; and (r, i) = c.</p>
+  <p>Explore 2D cross-sections and 3D hyperplane volumes of the 4-dimensional Julia set.
+     Supports both complex z &rarr; z&sup2; + c and quaternion q &rarr; q&sup2; + c iteration.</p>
   <h3>Navigation</h3>
   <div class="row"><span class="k">&larr;</span><span class="k">&rarr;</span> Move left / right &nbsp;(along screen-x)</div>
   <div class="row"><span class="k">&uarr;</span><span class="k">&darr;</span> Move up / down &nbsp;(along screen-y)</div>
@@ -138,6 +159,7 @@ body { background: #060610; color: #bbb; font-family: 'Consolas', 'Menlo', 'Mona
   <div class="row"><span class="k">&lt;</span><span class="k">&gt;</span> Rotate in selected plane</div>
   <h3>Display</h3>
   <div class="row"><span class="k">Tab</span> Toggle 2D / 3D mode</div>
+  <div class="row"><span class="k">F</span> Toggle fractal type (Complex / Quaternion)</div>
   <div class="row"><span class="k">C</span> Cycle color palette</div>
   <div class="row"><span class="k">I</span><span class="k">K</span> More / fewer iterations</div>
   <div class="row"><span class="k">P</span> Cycle 3D quality preset</div>
@@ -156,6 +178,38 @@ body { background: #060610; color: #bbb; font-family: 'Consolas', 'Menlo', 'Mona
     <div class="mrow">
       <button class="mbtn sel" data-mode="2d">2D Slice</button>
       <button class="mbtn" data-mode="3d">3D Volume</button>
+    </div>
+  </div>
+  <!-- Fractal Type -->
+  <div class="ps">
+    <div class="pl">Fractal Type</div>
+    <div class="mrow">
+      <button class="fbtn sel" data-ft="0">Complex z&sup2;+c</button>
+      <button class="fbtn" data-ft="1">Quat q&sup2;+c</button>
+    </div>
+  </div>
+  <!-- Quaternion c (hidden when complex) -->
+  <div class="ps" id="quat-section" style="display:none">
+    <div class="pl">Quaternion c</div>
+    <div class="srow">
+      <span class="slbl">a</span>
+      <input type="range" class="qc-slider" data-qci="0" min="-1.5" max="1.5" step="0.01" value="-0.2">
+      <span class="sval" id="pv-qc0">-0.20</span>
+    </div>
+    <div class="srow">
+      <span class="slbl">b</span>
+      <input type="range" class="qc-slider" data-qci="1" min="-1.5" max="1.5" step="0.01" value="0.8">
+      <span class="sval" id="pv-qc1">0.80</span>
+    </div>
+    <div class="srow">
+      <span class="slbl">c</span>
+      <input type="range" class="qc-slider" data-qci="2" min="-1.5" max="1.5" step="0.01" value="0">
+      <span class="sval" id="pv-qc2">0.00</span>
+    </div>
+    <div class="srow">
+      <span class="slbl">d</span>
+      <input type="range" class="qc-slider" data-qci="3" min="-1.5" max="1.5" step="0.01" value="0">
+      <span class="sval" id="pv-qc3">0.00</span>
     </div>
   </div>
   <!-- 4D Rotation -->
@@ -218,6 +272,16 @@ body { background: #060610; color: #bbb; font-family: 'Consolas', 'Menlo', 'Mona
       <button class="abtn" data-act="q3d" style="flex:1">Next &raquo;</button>
       <span class="cval" id="pv-q3d"></span>
     </div>
+    <div class="crow" id="pv-thresh-row" style="display:none">
+      <span class="clbl">Thresh</span>
+      <button class="cbtn" data-act="thresh-">&minus;</button>
+      <button class="cbtn" data-act="thresh+">+</button>
+      <span class="cval" id="pv-thresh"></span>
+    </div>
+    <div class="crow" id="pv-jitter-row" style="display:none">
+      <span class="clbl">Dither</span>
+      <button class="abtn" data-act="jitter" style="flex:1">Off</button>
+    </div>
   </div>
   <!-- Reset / Help -->
   <div class="ps">
@@ -236,6 +300,11 @@ body { background: #060610; color: #bbb; font-family: 'Consolas', 'Menlo', 'Mona
   <button data-p="lightning">Lightning</button>
   <button data-p="galaxy">Galaxy</button>
   <button data-p="mandelbrot">Mandelbrot</button>
+  <button data-p="sculpture">Sculpture</button>
+  <button data-p="q_lobes" class="qp">Q: Lobes</button>
+  <button data-p="q_filigree" class="qp">Q: Filigree</button>
+  <button data-p="q_rabbit" class="qp">Q: Rabbit</button>
+  <button data-p="q_spiral" class="qp">Q: Spiral</button>
 </div>
 
 <div id="quality-badge"></div>
@@ -273,15 +342,23 @@ const PRESETS = {
   lightning:   { o:[0,0, 0.355,  0.355 ], label:'Lightning' },
   galaxy:      { o:[0,0,-0.162,  1.04  ], label:'Galaxy' },
   mandelbrot:  { o:[0,0,-0.5, 0], basis:[[0,0,1,0],[0,0,0,1],[1,0,0,0],[0,1,0,0]], label:'Mandelbrot' },
+  sculpture:   { o:[0,0,-0.77,0.22],
+                 basis:[[0.4226,0,0.9063,0],[0,0.9659,0,0.2588],[-0.9063,0,0.4226,0],[0,-0.2588,0,0.9659]],
+                 label:'Sculpture' },
+  // Quaternion presets
+  q_lobes:     { o:[0,0,0,0], qc:[-0.2, 0.8, 0, 0],     fracType:1, label:'Q: Lobes' },
+  q_filigree:  { o:[0,0,0,0], qc:[-0.45, 0.65, 0, 0],   fracType:1, label:'Q: Filigree' },
+  q_rabbit:    { o:[0,0,0,0], qc:[-0.1, 0.75, 0, 0],     fracType:1, label:'Q: Rabbit' },
+  q_spiral:    { o:[0,0,0,0], qc:[-0.2, 0.6, 0.2, 0.2], fracType:1, label:'Q: Spiral' },
 };
 
 const PAL_NAMES = ['Ocean','Ember','Ice','Rainbow','Mono'];
 
 const Q3D = [
-  { label:'Low',    scale:0.30, steps:48,  iter:24 },
-  { label:'Medium', scale:0.50, steps:72,  iter:36 },
-  { label:'High',   scale:0.70, steps:100, iter:48 },
-  { label:'Ultra',  scale:1.00, steps:140, iter:64 },
+  { label:'Low',    scale:0.30, steps:64,  iter:32 },
+  { label:'Medium', scale:0.50, steps:100, iter:48 },
+  { label:'High',   scale:0.75, steps:150, iter:64 },
+  { label:'Ultra',  scale:1.00, steps:200, iter:80 },
 ];
 
 // ═══════════════════════════════════════════════════════════════
@@ -300,6 +377,10 @@ const S = {
   palette: 0,
   q3d: 1,           // quality preset index for 3D
   showHelp: false,
+  fracType: 0,      // 0 = Complex z²+c, 1 = Quaternion q²+c
+  qc: [-0.2, 0.8, 0.0, 0.0],  // quaternion c constant
+  threshold: 0.5,   // surface threshold (3D)
+  jitter: false,    // dither ray sampling to reduce banding
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -342,6 +423,8 @@ uniform vec2  u_res;
 uniform float u_zoom;
 uniform int   u_iter;
 uniform int   u_pal;
+uniform int   u_fracType;
+uniform vec4  u_qc;
 
 out vec4 fc;
 
@@ -362,21 +445,40 @@ void main(){
   uv *= 2.0 / u_zoom;
   vec4 p = u_o + uv.x*u_u + uv.y*u_v;
 
-  float zr = p.x, zi = p.y, cr = p.z, ci = p.w;
+  float a = p.x, b = p.y, c = p.z, d = p.w;
   int n = 0;
-  for(int i=0; i<2048; i++){
-    if(i >= u_iter) break;
-    float tr = zr*zr - zi*zi + cr;
-    zi = 2.0*zr*zi + ci;
-    zr = tr;
-    if(zr*zr + zi*zi > 256.0) break;
-    n++;
+
+  if(u_fracType == 0){
+    // Complex: z -> z^2 + c
+    float zr = a, zi = b, cr = c, ci = d;
+    for(int i=0; i<2048; i++){
+      if(i >= u_iter) break;
+      if(zr*zr + zi*zi > 256.0) break;
+      float tr = zr*zr - zi*zi + cr;
+      zi = 2.0*zr*zi + ci;
+      zr = tr;
+      n++;
+    }
+    a = zr; b = zi;
+  } else {
+    // Quaternion: q -> q^2 + c
+    for(int i=0; i<2048; i++){
+      if(i >= u_iter) break;
+      if(a*a+b*b+c*c+d*d > 256.0) break;
+      float na = a*a - b*b - c*c - d*d + u_qc.x;
+      float nb = 2.0*a*b + u_qc.y;
+      float nc = 2.0*a*c + u_qc.z;
+      float nd = 2.0*a*d + u_qc.w;
+      a = na; b = nb; c = nc; d = nd;
+      n++;
+    }
   }
 
   if(n >= u_iter){
     fc = vec4(0,0,0,1);
   } else {
-    float sn = float(n) + 1.0 - log2(max(log2(zr*zr+zi*zi)*.5, 1e-6));
+    float mag2 = a*a + b*b + c*c + d*d;
+    float sn = float(n) + 1.0 - log2(max(log2(mag2)*.5, 1e-6));
     fc = vec4(color(sn*.042), 1);
   }
 }`;
@@ -403,7 +505,7 @@ function mkProg(vs, fs) {
 
 const prog = mkProg(VS2, FS2);
 const uloc = {};
-['u_o','u_u','u_v','u_res','u_zoom','u_iter','u_pal'].forEach(n => uloc[n] = gl.getUniformLocation(prog, n));
+['u_o','u_u','u_v','u_res','u_zoom','u_iter','u_pal','u_fracType','u_qc'].forEach(n => uloc[n] = gl.getUniformLocation(prog, n));
 
 // Full-screen quad
 const vao = gl.createVertexArray();
@@ -419,7 +521,7 @@ function render2d() {
   const dpr = devicePixelRatio || 1;
   const w = Math.round(c2d.clientWidth  * dpr);
   const h = Math.round(c2d.clientHeight * dpr);
-  if (w < 1 || h < 1) return;             // layout not ready yet
+  if (w < 1 || h < 1) return;
   if (c2d.width !== w || c2d.height !== h) {
     c2d.width  = w;
     c2d.height = h;
@@ -434,13 +536,23 @@ function render2d() {
   gl.uniform1f(uloc.u_zoom, S.zoom);
   gl.uniform1i(uloc.u_iter, S.maxIter);
   gl.uniform1i(uloc.u_pal, S.palette);
+  gl.uniform1i(uloc.u_fracType, S.fracType);
+  gl.uniform4fv(uloc.u_qc, S.qc);
 
   gl.bindVertexArray(vao);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  3D Volume Renderer  (Three.js  +  ray-marching shader)
+//  3D Volume Renderer  (Three.js  +  hybrid ray-marching shader)
+//
+//  Architecture (matches the C++ version):
+//  - Fixed-step volume march with juliaEscape() for opacity
+//  - At first opaque sample, compute smooth normals via
+//    distance-field gradient (distNormal) — no fractal noise
+//  - Two-light Blinn-Phong shading (warm key + cool fill),
+//    dual-lobe specular, Fresnel rim, distance-field AO
+//  - Volume compositing (front-to-back) for anti-aliasing
 // ═══════════════════════════════════════════════════════════════
 
 let renderer3d, viewCam, orbitCtrl, fsScene, fsCam, volMat;
@@ -457,87 +569,230 @@ const VOL_FS = `
 precision highp float;
 varying vec2 vNdc;
 
-uniform mat4  u_ipv;        // inverse(proj * view) of perspective cam
+uniform mat4  u_ipv;        // inverse(proj * view)
+uniform mat4  u_pv;         // proj * view (forward, for depth output)
 uniform vec3  u_cp;         // camera position
-uniform vec4  u_o, u_u, u_v, u_w;
-uniform float u_iter, u_steps, u_opac;
+uniform vec4  u_o, u_u, u_v, u_w;  // 4D origin + basis vectors
+uniform float u_iter, u_steps;
 uniform int   u_pal;
+uniform int   u_fracType;   // 0 = complex, 1 = quaternion
+uniform vec4  u_qc;         // quaternion c constant
+uniform float u_threshold;  // surface opacity ramp width
+uniform int   u_jitter;    // 0 = off (centered sampling), 1 = on (dithered)
 
-vec3 pal(float t, vec3 a, vec3 b, vec3 c, vec3 d){
-  return a + b * cos(6.28318*(c*t+d));
-}
-vec3 getCol(float t){
-  if(u_pal==0) return pal(t, vec3(.5),vec3(.5),vec3(1),vec3(.00,.10,.20));
-  if(u_pal==1) return pal(t, vec3(.5,.1,.0),vec3(.5,.4,.3),vec3(1,.7,.4),vec3(.0,.15,.2));
-  if(u_pal==2) return pal(t, vec3(.0,.15,.25),vec3(.35,.45,.55),vec3(1),vec3(.0,.15,.25));
-  if(u_pal==3) return pal(t, vec3(.5),vec3(.5),vec3(1,1,1),vec3(.0,.33,.67));
-  float g = .5+.5*cos(6.28318*t);
-  return vec3(g);
-}
-
-vec2 boxHit(vec3 ro, vec3 rd, vec3 mn, vec3 mx){
-  vec3 inv = 1.0/rd;
-  vec3 t1 = (mn-ro)*inv, t2 = (mx-ro)*inv;
-  vec3 tA = min(t1,t2), tB = max(t1,t2);
-  return vec2(max(max(tA.x,tA.y),tA.z), min(min(tB.x,tB.y),tB.z));
-}
-
-void main(){
-  vec4 n4 = u_ipv * vec4(vNdc, -1.0, 1.0);
-  vec4 f4 = u_ipv * vec4(vNdc,  1.0, 1.0);
-  vec3 np = n4.xyz/n4.w, fp = f4.xyz/f4.w;
-  vec3 ro = u_cp;
-  vec3 rd = normalize(fp - np);
-
-  vec2 tt = boxHit(ro, rd, vec3(-2.0), vec3(2.0));
-  tt.x = max(tt.x, 0.0);
-  if(tt.x >= tt.y){ gl_FragColor = vec4(0.04,0.04,0.07,1); return; }
-
-  int steps = int(u_steps);
-  int maxIt = int(u_iter);
-  float dt  = (tt.y - tt.x) / u_steps;
-  vec4 acc  = vec4(0.0);
-
-  for(int i=0; i<256; i++){
-    if(i >= steps) break;
-    float tc = tt.x + (float(i)+0.5)*dt;
-    vec3 pos = ro + tc*rd;
-
+// ── Escape time (for opacity — reliable with fixed steps) ──
+float juliaEscape(vec3 pos) {
     vec4 p4 = u_o + pos.x*u_u + pos.y*u_v + pos.z*u_w;
-    float zr = p4.x, zi = p4.y, cr = p4.z, ci = p4.w;
+    int maxIt = int(u_iter);
     int n = 0;
-    for(int j=0; j<256; j++){
-      if(j >= maxIt) break;
-      float tr = zr*zr - zi*zi + cr;
-      zi = 2.0*zr*zi + ci;
-      zr = tr;
-      if(zr*zr + zi*zi > 4.0) break;
-      n++;
-    }
 
-    float fi = float(n)/u_iter;
-    vec3  sc;
-    float sa;
-    if(n >= maxIt){
-      sc = vec3(0.04, 0.015, 0.08);
-      sa = 0.25 * u_opac;
+    if (u_fracType == 0) {
+        float zr = p4.x, zi = p4.y, cr = p4.z, ci = p4.w;
+        for (int j = 0; j < 256; j++) {
+            if (j >= maxIt) break;
+            if (zr*zr + zi*zi > 4.0) break;
+            float t = zr*zr - zi*zi + cr;
+            zi = 2.0*zr*zi + ci;
+            zr = t;
+            n++;
+        }
     } else {
-      sa = pow(fi, 2.5) * u_opac * 1.6;
-      sc = getCol(fi * 4.0) * (0.4 + 0.6*fi);
+        float a = p4.x, b = p4.y, c = p4.z, d = p4.w;
+        for (int j = 0; j < 256; j++) {
+            if (j >= maxIt) break;
+            if (a*a+b*b+c*c+d*d > 4.0) break;
+            float na = a*a - b*b - c*c - d*d + u_qc.x;
+            float nb = 2.0*a*b + u_qc.y;
+            float nc = 2.0*a*c + u_qc.z;
+            float nd = 2.0*a*d + u_qc.w;
+            a = na; b = nb; c = nc; d = nd;
+            n++;
+        }
     }
-    sa *= dt * 10.0;
-    sa = clamp(sa, 0.0, 1.0);
+    return float(n) / u_iter;
+}
 
-    acc.rgb += (1.0-acc.a) * sa * sc;
-    acc.a   += (1.0-acc.a) * sa;
-    if(acc.a > 0.97) break;
-  }
+// ── Distance estimator (for smooth normals + AO — NOT for marching) ──
+float juliaDist(vec3 pos) {
+    vec4 p4 = u_o + pos.x*u_u + pos.y*u_v + pos.z*u_w;
+    int maxIt = int(u_iter);
 
-  // Subtle background gradient
-  float bg = 0.5 + 0.5*rd.y;
-  acc.rgb += (1.0-acc.a) * mix(vec3(0.03,0.03,0.06), vec3(0.06,0.06,0.10), bg);
-  acc.a = 1.0;
-  gl_FragColor = acc;
+    if (u_fracType == 0) {
+        // Complex distance estimator: d = |z| * ln|z| / |dz|
+        float zr = p4.x, zi = p4.y, cr = p4.z, ci = p4.w;
+        float dzr = 1.0, dzi = 0.0;
+        for (int j = 0; j < 256; j++) {
+            if (j >= maxIt) break;
+            float r2 = zr*zr + zi*zi;
+            if (r2 > 256.0) {
+                float r = sqrt(r2);
+                return 0.5 * r * log(r) / max(sqrt(dzr*dzr + dzi*dzi), 1e-20);
+            }
+            float nd = 2.0*(zr*dzr - zi*dzi);
+            dzi = 2.0*(zr*dzi + zi*dzr);
+            dzr = nd;
+            float nz = zr*zr - zi*zi + cr;
+            zi = 2.0*zr*zi + ci;
+            zr = nz;
+        }
+        return 0.0;
+    } else {
+        // Quaternion distance estimator: d = |q| * ln|q| / |dq|
+        // dq' = 2 * q * dq (quaternion multiply), dq_0 = (1,0,0,0)
+        float a = p4.x, b = p4.y, c = p4.z, d = p4.w;
+        float da = 1.0, db = 0.0, dc = 0.0, dd = 0.0;
+        for (int j = 0; j < 256; j++) {
+            if (j >= maxIt) break;
+            float r2 = a*a + b*b + c*c + d*d;
+            if (r2 > 256.0) {
+                float r = sqrt(r2);
+                float dr = sqrt(da*da + db*db + dc*dc + dd*dd);
+                return 0.5 * r * log(r) / max(dr, 1e-20);
+            }
+            // dq = 2 * q * dq (quaternion product)
+            float nda = 2.0*(a*da - b*db - c*dc - d*dd);
+            float ndb = 2.0*(a*db + b*da + c*dd - d*dc);
+            float ndc = 2.0*(a*dc - b*dd + c*da + d*db);
+            float ndd = 2.0*(a*dd + b*dc - c*db + d*da);
+            da = nda; db = ndb; dc = ndc; dd = ndd;
+            // q = q^2 + c
+            float na = a*a - b*b - c*c - d*d + u_qc.x;
+            float nb = 2.0*a*b + u_qc.y;
+            float nc = 2.0*a*c + u_qc.z;
+            float nd = 2.0*a*d + u_qc.w;
+            a = na; b = nb; c = nc; d = nd;
+        }
+        return 0.0;
+    }
+}
+
+// Normal from distance field gradient (smooth, noise-free)
+vec3 distNormal(vec3 p) {
+    float e = 0.004;
+    return normalize(vec3(
+        juliaDist(p + vec3(e,0,0)) - juliaDist(p - vec3(e,0,0)),
+        juliaDist(p + vec3(0,e,0)) - juliaDist(p - vec3(0,e,0)),
+        juliaDist(p + vec3(0,0,e)) - juliaDist(p - vec3(0,0,e))
+    ));
+}
+
+// Ambient occlusion from distance field
+float distAO(vec3 p, vec3 n) {
+    float ao = 0.0, w = 1.0;
+    for (int i = 1; i <= 5; i++) {
+        float d = 0.012 * float(i);
+        ao += w * max(d - juliaDist(p + n * d), 0.0);
+        w *= 0.55;
+    }
+    return clamp(1.0 - 4.5 * ao, 0.0, 1.0);
+}
+
+vec2 boxHit(vec3 ro, vec3 rd, vec3 mn, vec3 mx) {
+    vec3 inv = 1.0 / rd;
+    vec3 t1 = (mn - ro) * inv, t2 = (mx - ro) * inv;
+    vec3 tA = min(t1, t2), tB = max(t1, t2);
+    return vec2(max(max(tA.x, tA.y), tA.z), min(min(tB.x, tB.y), tB.z));
+}
+
+void main() {
+    vec4 n4 = u_ipv * vec4(vNdc, -1.0, 1.0);
+    vec4 f4 = u_ipv * vec4(vNdc,  1.0, 1.0);
+    vec3 np = n4.xyz / n4.w, fp = f4.xyz / f4.w;
+    vec3 ro = u_cp;
+    vec3 rd = normalize(fp - np);
+
+    vec2 tt = boxHit(ro, rd, vec3(-2.0), vec3(2.0));
+    tt.x = max(tt.x, 0.0);
+    if (tt.x >= tt.y) { gl_FragColor = vec4(0, 0, 0, 1); return; }
+
+    // ── Material base color (single hue per palette) ──
+    vec3 baseCol;
+    if      (u_pal == 0) baseCol = vec3(0.30, 0.70, 0.78);  // teal jade
+    else if (u_pal == 1) baseCol = vec3(0.82, 0.58, 0.48);  // rose gold
+    else if (u_pal == 2) baseCol = vec3(0.45, 0.58, 0.88);  // steel blue
+    else if (u_pal == 3) baseCol = vec3(0.85, 0.78, 0.68);  // ivory
+    else                 baseCol = vec3(0.72);               // silver
+
+    // ── Fixed-step volume march ──
+    int steps = int(u_steps);
+    float dt = (tt.y - tt.x) / u_steps;
+    vec4 accum = vec4(0.0);
+    bool surfaceFound = false;
+    vec3 litColor = vec3(0.0);
+    vec3 surfPos = vec3(0.0);
+
+    // Per-pixel sampling offset: centered (0.5) or dithered (random)
+    float offset = 0.5;
+    if (u_jitter == 1)
+        offset = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+
+    for (int i = 0; i < 256; i++) {
+        if (i >= steps) break;
+        float t = tt.x + (float(i) + offset) * dt;
+        if (t > tt.y) break;
+        vec3 pos = ro + t * rd;
+
+        float fi = juliaEscape(pos);
+
+        // Opacity: exterior transparent, ramp up at boundary, solid interior
+        float alpha = smoothstep(0.08, 0.25 + u_threshold * 0.15, fi);
+        alpha *= dt * 20.0;
+        alpha = min(alpha, 1.0);
+
+        if (alpha > 0.003) {
+            // Compute lighting ONCE at first surface contact.
+            // Distance-field normal is smooth (no fractal noise).
+            // Volume compositing handles anti-aliasing.
+            if (!surfaceFound) {
+                surfaceFound = true;
+                surfPos = pos;
+                vec3 N = distNormal(pos);
+                float ao = distAO(pos, N);
+
+                // Two-light warm/cool shading
+                vec3 keyDir  = normalize(vec3(0.5, 0.85, 0.5));
+                vec3 keyCol  = vec3(1.0, 0.88, 0.75);
+                vec3 fillDir = normalize(vec3(-0.4, -0.2, -0.6));
+                vec3 fillCol = vec3(0.42, 0.36, 0.48);
+
+                float diff1 = max(dot(N, keyDir), 0.0);
+                float diff2 = max(dot(N, fillDir), 0.0) * 0.35;
+
+                vec3  H     = normalize(keyDir - rd);
+                // Dual-lobe specular: tight highlight + soft sheen
+                float spec1 = pow(max(dot(N, H), 0.0), 48.0) * 0.40;
+                float spec2 = pow(max(dot(N, H), 0.0), 8.0)  * 0.18;
+                float fres  = pow(1.0 - max(dot(N, -rd), 0.0), 4.0) * 0.12;
+
+                // Ground-bounce rim (subtle warm light from below)
+                float bounce = max(dot(N, vec3(0, -1, 0)), 0.0) * 0.06;
+
+                litColor = baseCol * (0.12 + diff1*keyCol + diff2*fillCol
+                                          + bounce*vec3(0.8, 0.6, 0.5))
+                         + keyCol * (spec1 + spec2)
+                         + vec3(0.50, 0.45, 0.55) * fres;
+                litColor *= ao;
+            }
+
+            accum.rgb += (1.0 - accum.a) * alpha * litColor;
+            accum.a   += (1.0 - accum.a) * alpha;
+        }
+
+        if (accum.a > 0.98) break;
+    }
+
+    if (!surfaceFound) {
+        gl_FragColor = vec4(0, 0, 0, 1);
+        gl_FragDepth = 1.0;
+        return;
+    }
+
+    accum.rgb += (1.0 - accum.a) * vec3(0.0);
+    gl_FragColor = vec4(accum.rgb, 1.0);
+
+    // Write depth at surface hit so wireframe is properly occluded
+    vec4 clip = u_pv * vec4(surfPos, 1.0);
+    gl_FragDepth = clip.z / clip.w * 0.5 + 0.5;
 }`;
 
 function init3d() {
@@ -561,20 +816,24 @@ function init3d() {
 
   volMat = new THREE.ShaderMaterial({
     uniforms: {
-      u_ipv:   { value: new THREE.Matrix4() },
-      u_cp:    { value: new THREE.Vector3() },
-      u_o:     { value: new THREE.Vector4() },
-      u_u:     { value: new THREE.Vector4() },
-      u_v:     { value: new THREE.Vector4() },
-      u_w:     { value: new THREE.Vector4() },
-      u_iter:  { value: 36.0 },
-      u_steps: { value: 72.0 },
-      u_opac:  { value: 1.0 },
-      u_pal:   { value: 0 },
+      u_ipv:       { value: new THREE.Matrix4() },
+      u_pv:        { value: new THREE.Matrix4() },
+      u_cp:        { value: new THREE.Vector3() },
+      u_o:         { value: new THREE.Vector4() },
+      u_u:         { value: new THREE.Vector4() },
+      u_v:         { value: new THREE.Vector4() },
+      u_w:         { value: new THREE.Vector4() },
+      u_iter:      { value: 36.0 },
+      u_steps:     { value: 72.0 },
+      u_pal:       { value: 0 },
+      u_fracType:  { value: 0 },
+      u_qc:        { value: new THREE.Vector4(-0.2, 0.8, 0, 0) },
+      u_threshold: { value: 0.5 },
+      u_jitter:    { value: 0 },
     },
     vertexShader: VOL_VS,
     fragmentShader: VOL_FS,
-    depthWrite: false,
+    depthWrite: true,
     depthTest: false,
   });
 
@@ -592,7 +851,7 @@ function init3d() {
 
   // Axis indicators
   const axLen = 2.4;
-  const axColors = [0xff4444, 0x44ff44, 0x4488ff]; // X=red, Y=green, Z=blue
+  const axColors = [0xff4444, 0x44ff44, 0x4488ff];
   const axDirs   = [[axLen,0,0],[0,axLen,0],[0,0,axLen]];
   for (let i = 0; i < 3; i++) {
     const g = new THREE.BufferGeometry().setFromPoints([
@@ -618,20 +877,25 @@ function render3d() {
   viewCam.updateProjectionMatrix();
   viewCam.updateMatrixWorld();
 
-  // Inverse projection-view
-  _pvMat.multiplyMatrices(viewCam.projectionMatrix, viewCam.matrixWorldInverse).invert();
+  // Forward and inverse projection-view
+  _pvMat.multiplyMatrices(viewCam.projectionMatrix, viewCam.matrixWorldInverse);
 
   const u = volMat.uniforms;
+  u.u_pv.value.copy(_pvMat);
+  _pvMat.invert();
   u.u_ipv.value.copy(_pvMat);
   u.u_cp.value.copy(viewCam.position);
   u.u_o.value.set(...S.origin);
   u.u_u.value.set(...S.basis[0]);
   u.u_v.value.set(...S.basis[1]);
   u.u_w.value.set(...S.basis[2]);
-  u.u_iter.value  = q.iter;
-  u.u_steps.value = q.steps;
-  u.u_opac.value  = 1.0;
-  u.u_pal.value   = S.palette;
+  u.u_iter.value      = q.iter;
+  u.u_steps.value     = q.steps;
+  u.u_pal.value       = S.palette;
+  u.u_fracType.value  = S.fracType;
+  u.u_qc.value.set(...S.qc);
+  u.u_threshold.value = S.threshold;
+  u.u_jitter.value    = S.jitter ? 1 : 0;
 
   const w = Math.round(innerWidth  * q.scale);
   const h = Math.round(innerHeight * q.scale);
@@ -688,6 +952,9 @@ document.addEventListener('keydown', e => {
     case 'Tab':
       e.preventDefault();
       setMode(S.mode === '2d' ? '3d' : '2d');
+      break;
+    case 'f': case 'F':
+      S.fracType = S.fracType === 0 ? 1 : 0;
       break;
     case 'r': case 'R': resetView(); break;
     case 'c': case 'C': S.palette = (S.palette + 1) % PAL_NAMES.length; break;
@@ -797,6 +1064,9 @@ function execAct(act) {
     case 'iter-': S.maxIter = Math.max(S.maxIter >> 1, 16); break;
     case 'pal':   S.palette = (S.palette + 1) % PAL_NAMES.length; break;
     case 'q3d':   S.q3d = (S.q3d + 1) % Q3D.length; break;
+    case 'thresh+': S.threshold = Math.min(S.threshold + 0.1, 2.0); break;
+    case 'thresh-': S.threshold = Math.max(S.threshold - 0.1, 0.0); break;
+    case 'jitter':  S.jitter = !S.jitter; break;
     case 'reset': resetView(); break;
     case 'help':
       S.showHelp = !S.showHelp;
@@ -811,6 +1081,8 @@ panelEl.addEventListener('pointerdown', e => {
 
   // Mode toggle
   if (btn.dataset.mode) { setMode(btn.dataset.mode); return; }
+  // Fractal type toggle
+  if (btn.dataset.ft !== undefined) { S.fracType = parseInt(btn.dataset.ft); return; }
   // Plane select
   if (btn.dataset.pl !== undefined) { S.plane = parseInt(btn.dataset.pl); return; }
   // Action
@@ -824,23 +1096,50 @@ panelEl.addEventListener('pointerdown', e => {
 });
 window.addEventListener('pointerup', () => clearInterval(_rid));
 
+// ── Quaternion c sliders ──
+document.querySelectorAll('.qc-slider').forEach(slider => {
+  slider.addEventListener('input', () => {
+    const idx = parseInt(slider.dataset.qci);
+    S.qc[idx] = parseFloat(slider.value);
+  });
+});
+
 // Cache panel value elements
 const pvZoom = document.getElementById('pv-zoom');
 const pvIter = document.getElementById('pv-iter');
 const pvPal  = document.getElementById('pv-pal');
 const pvQ3d  = document.getElementById('pv-q3d');
 const pvQ3dRow = document.getElementById('pv-q3d-row');
+const pvThresh = document.getElementById('pv-thresh');
+const pvThreshRow = document.getElementById('pv-thresh-row');
+const pvJitterRow = document.getElementById('pv-jitter-row');
+const pvJitterBtn = pvJitterRow ? pvJitterRow.querySelector('.abtn') : null;
 const mBtns  = panelEl.querySelectorAll('.mbtn');
 const pBtns  = panelEl.querySelectorAll('.pbtn');
+const fBtns  = panelEl.querySelectorAll('.fbtn');
+const quatSection = document.getElementById('quat-section');
+const qcValEls = [0,1,2,3].map(i => document.getElementById('pv-qc'+i));
+const qcSliders = document.querySelectorAll('.qc-slider');
 
 function updatePanel() {
   mBtns.forEach(b => b.classList.toggle('sel', b.dataset.mode === S.mode));
+  fBtns.forEach(b => b.classList.toggle('sel', +b.dataset.ft === S.fracType));
   pBtns.forEach(b => b.classList.toggle('sel', +b.dataset.pl === S.plane));
   pvZoom.textContent = S.zoom < 1 ? S.zoom.toFixed(3) : S.zoom.toFixed(1);
   pvIter.textContent = S.maxIter;
   pvPal.textContent = PAL_NAMES[S.palette];
   pvQ3d.textContent = Q3D[S.q3d].label;
   pvQ3dRow.style.display = S.mode === '3d' ? '' : 'none';
+  pvThreshRow.style.display = S.mode === '3d' ? '' : 'none';
+  pvJitterRow.style.display = S.mode === '3d' ? '' : 'none';
+  if (pvThresh) pvThresh.textContent = S.threshold.toFixed(1);
+  if (pvJitterBtn) pvJitterBtn.textContent = S.jitter ? 'On' : 'Off';
+  // Quaternion c section
+  quatSection.style.display = S.fracType === 1 ? '' : 'none';
+  for (let i = 0; i < 4; i++) {
+    qcValEls[i].textContent = S.qc[i].toFixed(2);
+    qcSliders[i].value = S.qc[i];
+  }
 }
 
 // ── Presets ──
@@ -852,6 +1151,14 @@ document.querySelectorAll('#presets button').forEach(btn => {
     S.origin = [...p.o];
     S.basis  = p.basis ? p.basis.map(r=>[...r]) : eye4();
     S.zoom   = 0.8;
+    if (p.fracType !== undefined) {
+      S.fracType = p.fracType;
+    } else {
+      S.fracType = 0;
+    }
+    if (p.qc) {
+      S.qc = [...p.qc];
+    }
   });
 });
 
@@ -866,10 +1173,15 @@ function setMode(m) {
 }
 
 function resetView() {
-  S.origin = [0, 0, -0.7269, 0.1889];
+  if (S.fracType === 0) {
+    S.origin = [0, 0, -0.7269, 0.1889];
+  } else {
+    S.origin = [0, 0, 0, 0];
+  }
   S.basis  = eye4();
   S.zoom   = 0.8;
   S.plane  = 0;
+  S.threshold = 0.5;
   if (viewCam) { viewCam.position.set(1.5, 2.2, 5.5); orbitCtrl.target.set(0,0,0); orbitCtrl.update(); }
 }
 
@@ -882,12 +1194,10 @@ const qBadge = document.getElementById('quality-badge');
 let fpsT = performance.now(), fpsCnt = 0, fpsVal = 0;
 
 function axisLabel(v) {
-  // Find dominant axis of a basis vector
   let best = 0, bi = 0;
   const names = ['X','Y','R','I'];
   for (let i = 0; i < 4; i++) { const a = Math.abs(v[i]); if (a > best) { best = a; bi = i; } }
   const sign = v[bi] < 0 ? '-' : '';
-  const purity = best.toFixed(2);
   return `${sign}${names[bi]}`;
 }
 
@@ -899,16 +1209,28 @@ function updateHUD() {
   const o = S.origin;
   const p = PLANES[S.plane];
   const modeClass = S.mode === '2d' ? 'm2d' : 'm3d';
+  const fracLabel = S.fracType === 0 ? 'Complex z\u00B2+c' : 'Quat q\u00B2+c';
 
   // Compact basis description
   const bDesc = S.mode === '2d'
     ? `<span class="hdim">\u2192${axisLabel(S.basis[0])} \u2191${axisLabel(S.basis[1])}</span>`
     : `<span class="hdim">\u2192${axisLabel(S.basis[0])} \u2191${axisLabel(S.basis[1])} \u21A6${axisLabel(S.basis[2])}</span>`;
 
+  let posInfo;
+  if (S.fracType === 0) {
+    posInfo =
+      `<div><span class="hl">z\u2080 =</span> <span class="hv">${f4(o[0])} ${o[1]<0?'\u2212':'+'}${f4(Math.abs(o[1]))}i</span></div>` +
+      `<div><span class="hl">c&nbsp; =</span> <span class="hv">${f4(o[2])} ${o[3]<0?'\u2212':'+'}${f4(Math.abs(o[3]))}i</span></div>`;
+  } else {
+    posInfo =
+      `<div><span class="hl">q =</span> <span class="hv">(${f4(o[0])}, ${f4(o[1])}, ${f4(o[2])}, ${f4(o[3])})</span></div>` +
+      `<div><span class="hl">c =</span> <span class="hv">(${S.qc[0].toFixed(2)}, ${S.qc[1].toFixed(2)}, ${S.qc[2].toFixed(2)}, ${S.qc[3].toFixed(2)})</span></div>`;
+  }
+
   hudEl.innerHTML =
     `<div class="hud-mode ${modeClass}">${S.mode.toUpperCase()} MODE</div>` +
-    `<div><span class="hl">z\u2080 =</span> <span class="hv">${f4(o[0])} ${o[1]<0?'\u2212':'+'}${f4(Math.abs(o[1]))}i</span></div>` +
-    `<div><span class="hl">c&nbsp; =</span> <span class="hv">${f4(o[2])} ${o[3]<0?'\u2212':'+'}${f4(Math.abs(o[3]))}i</span></div>` +
+    `<div><span class="hf">${fracLabel}</span></div>` +
+    posInfo +
     `<div><span class="hl">zoom</span> <span class="hv">\u00D7${S.zoom < 1 ? S.zoom.toFixed(3) : S.zoom.toFixed(1)}</span>` +
     ` <span class="hl">iter</span> <span class="hv">${S.maxIter}</span>` +
     ` <span class="hl">pal</span> <span class="hv">${PAL_NAMES[S.palette]}</span></div>` +
