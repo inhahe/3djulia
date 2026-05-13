@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>4D Julia Set Explorer</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>4D Julia Set Explorer (v2)</title>
 <style>
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: #060610; color: #bbb; font-family: 'Consolas', 'Menlo', 'Monaco', monospace;
@@ -13,6 +16,8 @@ body { background: #060610; color: #bbb; font-family: 'Consolas', 'Menlo', 'Mona
 #view2d { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
 #view3d { position: fixed; inset: 0; display: none; }
 #view3d canvas { width: 100% !important; height: 100% !important; image-rendering: auto; }
+#view2di-overlay { position: fixed; inset: 0; width: 100%; height: 100%;
+                   display: none; pointer-events: none; z-index: 1; }
 
 /* ── Loading ── */
 #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -82,6 +87,8 @@ body { background: #060610; color: #bbb; font-family: 'Consolas', 'Menlo', 'Mona
         letter-spacing: .5px; text-align: center; transition: all .15s; }
 .mbtn.sel { border-color: #08a; }
 .mbtn.sel[data-mode="2d"] { background: #0a1828; color: #0df; }
+.mbtn.sel[data-mode="2di"] { background: #0a2818; color: #0f8; }
+.mbtn.sel[data-mode="2dc"] { background: #1a1420; color: #f8a; }
 .mbtn.sel[data-mode="3d"] { background: #1a1208; color: #fa0; }
 .mbtn:hover:not(.sel) { background: #151528; color: #aab; }
 /* fractal type */
@@ -141,6 +148,7 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: #
 <div id="loading"><span>Loading 4D Julia Set Explorer...</span></div>
 <canvas id="view2d"></canvas>
 <div id="view3d"></div>
+<canvas id="view2di-overlay"></canvas>
 <div id="hud"><div id="hud-inner"></div></div>
 
 <div id="help">
@@ -158,13 +166,21 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: #
   <div class="row"><span class="k">1</span>&ndash;<span class="k">6</span> Select rotation plane</div>
   <div class="row"><span class="k">&lt;</span><span class="k">&gt;</span> Rotate in selected plane</div>
   <h3>Display</h3>
-  <div class="row"><span class="k">Tab</span> Toggle 2D / 3D mode</div>
+  <div class="row"><span class="k">Tab</span> Cycle view modes (2D Slice / 2D Julia / 3D)</div>
   <div class="row"><span class="k">F</span> Toggle fractal type (Complex / Quaternion)</div>
   <div class="row"><span class="k">C</span> Cycle color palette</div>
   <div class="row"><span class="k">I</span><span class="k">K</span> More / fewer iterations</div>
   <div class="row"><span class="k">P</span> Cycle 3D quality preset</div>
   <div class="row"><span class="k">R</span> Reset view</div>
   <div class="row"><span class="k">H</span> Toggle this help</div>
+  <h3>2D Julia Mode</h3>
+  <div class="row">Move mouse to change z&#8320; (initial value)</div>
+  <div class="row">Mouse at center &rarr; z&#8320; = 0 &rarr; Mandelbrot set</div>
+  <div class="row"><span style="color:#0f0">Green outline</span> = Mandelbrot set boundary</div>
+  <div class="row"><span style="color:#38f">Blue lines</span> = iteration escape path at cursor</div>
+  <h3>2D Chess Mode</h3>
+  <div class="row">Checkerboard shifted by first iteration z&rarr;z&sup2;+c</div>
+  <div class="row"><span class="k">[</span><span class="k">]</span> Decrease / increase square size</div>
   <p style="margin-top:16px;color:#445;font-size:11px;">
     Tip: The Mandelbrot set is the c-plane cross-section at z&#8320; = 0.
     Rotate in the X&ndash;R or Y&ndash;I planes to smoothly blend between Julia and Mandelbrot views.
@@ -175,13 +191,15 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: #
   <!-- Mode -->
   <div class="ps">
     <div class="pl">View Mode</div>
-    <div class="mrow">
+    <div class="mrow" style="display:grid;grid-template-columns:1fr 1fr">
       <button class="mbtn sel" data-mode="2d">2D Slice</button>
+      <button class="mbtn" data-mode="2di">2D Julia</button>
+      <button class="mbtn" data-mode="2dc">2D Chess</button>
       <button class="mbtn" data-mode="3d">3D Volume</button>
     </div>
   </div>
   <!-- Fractal Type -->
-  <div class="ps">
+  <div class="ps" id="fractype-section">
     <div class="pl">Fractal Type</div>
     <div class="mrow">
       <button class="fbtn sel" data-ft="0">Complex z&sup2;+c</button>
@@ -213,7 +231,7 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: #
     </div>
   </div>
   <!-- 4D Rotation -->
-  <div class="ps">
+  <div class="ps" id="rotation-section">
     <div class="pl">4D Rotation Plane</div>
     <div class="pgrid">
       <button class="pbtn sel" data-pl="0">X&ndash;Y<small>z-plane</small></button>
@@ -237,6 +255,7 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: #
       <button class="abtn" data-act="down">&darr; Down</button>
       <button class="abtn" data-act="right">Right &rarr;</button>
     </div>
+    <div id="depth-section">
     <div class="pl" style="margin-top:6px">Move (Depth)</div>
     <div class="prow">
       <button class="abtn" data-act="in">&nearr; In <span class="dim">W</span></button>
@@ -245,6 +264,7 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: #
     <div class="prow">
       <button class="abtn" data-act="4d+">&oplus; 4th dim + <span class="dim">Q</span></button>
       <button class="abtn" data-act="4d-">&ominus; 4th dim &minus; <span class="dim">E</span></button>
+    </div>
     </div>
   </div>
   <!-- View -->
@@ -266,6 +286,12 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: #
       <span class="clbl">Color</span>
       <button class="abtn" data-act="pal" style="flex:1">Next &raquo;</button>
       <span class="cval" id="pv-pal"></span>
+    </div>
+    <div class="crow" id="pv-chess-row" style="display:none">
+      <span class="clbl">Chess</span>
+      <button class="cbtn" data-act="chess-">&minus;</button>
+      <button class="cbtn" data-act="chess+">+</button>
+      <span class="cval" id="pv-chess"></span>
     </div>
     <div class="crow" id="pv-q3d-row" style="display:none">
       <span class="clbl">3D Qual</span>
@@ -381,6 +407,10 @@ const S = {
   qc: [-0.2, 0.8, 0.0, 0.0],  // quaternion c constant
   threshold: 0.5,   // surface threshold (3D)
   jitter: false,    // dither ray sampling to reduce banding
+  chessSize: 0.05,         // checkerboard square size for 2D Chess mode
+  diCenter: [-0.5, 0],    // c-plane center for 2D Interactive Julia mode
+  mouseScreenX: 0,         // mouse X in CSS pixels (for 2di mode)
+  mouseScreenY: 0,         // mouse Y in CSS pixels (for 2di mode)
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -483,6 +513,168 @@ void main(){
   }
 }`;
 
+// ── 2D Interactive Julia shader ──
+
+const FS2DI = `#version 300 es
+precision highp float;
+
+uniform vec2  u_center;
+uniform vec2  u_z0;
+uniform vec2  u_res;
+uniform float u_zoom;
+uniform int   u_iter;
+uniform int   u_pal;
+uniform sampler2D u_mbrot;
+
+out vec4 fc;
+
+vec3 pal(float t, vec3 a, vec3 b, vec3 c, vec3 d){
+  return a + b * cos(6.28318*(c*t+d));
+}
+vec3 color(float t){
+  if(u_pal==0) return pal(t, vec3(.5),vec3(.5),vec3(1),vec3(.00,.10,.20));
+  if(u_pal==1) return pal(t, vec3(.5,.1,.0),vec3(.5,.4,.3),vec3(1,.7,.4),vec3(.0,.15,.2));
+  if(u_pal==2) return pal(t, vec3(.0,.15,.25),vec3(.35,.45,.55),vec3(1),vec3(.0,.15,.25));
+  if(u_pal==3) return pal(t, vec3(.5),vec3(.5),vec3(1,1,1),vec3(.0,.33,.67));
+  float g = .5+.5*cos(6.28318*t);
+  return vec3(g);
+}
+
+void main(){
+  vec2 uv = (gl_FragCoord.xy - .5*u_res) / min(u_res.x, u_res.y);
+  uv *= 2.0 / u_zoom;
+  vec2 c = uv + u_center;
+
+  // Generalized Mandelbrot: z -> z^2 + c, starting from z0
+  float zr = u_z0.x, zi = u_z0.y, cr = c.x, ci = c.y;
+  int n = 0;
+  for(int i=0; i<2048; i++){
+    if(i >= u_iter) break;
+    if(zr*zr + zi*zi > 256.0) break;
+    float tr = zr*zr - zi*zi + cr;
+    zi = 2.0*zr*zi + ci;
+    zr = tr;
+    n++;
+  }
+
+  vec3 col;
+  if(n >= u_iter){
+    col = vec3(0,0,0);
+  } else {
+    float mag2 = zr*zr + zi*zi;
+    float sn = float(n) + 1.0 - log2(max(log2(mag2)*.5, 1e-6));
+    col = color(sn*.042);
+  }
+
+  // Mandelbrot outline from cached mask texture
+  vec2 tc = gl_FragCoord.xy / u_res;
+  vec2 px = 1.5 / u_res;
+  bool b0 = texture(u_mbrot, tc).r > 0.5;
+  if(b0 != (texture(u_mbrot, tc + vec2(px.x, 0.0)).r > 0.5) ||
+     b0 != (texture(u_mbrot, tc + vec2(0.0, px.y)).r > 0.5) ||
+     b0 != (texture(u_mbrot, tc + vec2(-px.x, 0.0)).r > 0.5) ||
+     b0 != (texture(u_mbrot, tc + vec2(0.0, -px.y)).r > 0.5)){
+    col = mix(col, vec3(0.0, 1.0, 0.0), 0.85);
+  }
+
+  fc = vec4(col, 1);
+}`;
+
+// ── Mandelbrot mask shader (renders membership to texture) ──
+
+const FS_MBROT = `#version 300 es
+precision highp float;
+
+uniform vec2  u_center;
+uniform vec2  u_res;
+uniform float u_zoom;
+uniform int   u_iter;
+
+out vec4 fc;
+
+void main(){
+  vec2 uv = (gl_FragCoord.xy - .5*u_res) / min(u_res.x, u_res.y);
+  uv *= 2.0 / u_zoom;
+  vec2 c = uv + u_center;
+  float zr = 0.0, zi = 0.0;
+  int maxIt = min(u_iter, 128);
+  for(int i = 0; i < 2048; i++){
+    if(i >= maxIt) break;
+    if(zr*zr + zi*zi > 4.0){ fc = vec4(0,0,0,1); return; }
+    float t = zr*zr - zi*zi + c.x;
+    zi = 2.0*zr*zi + c.y;
+    zr = t;
+  }
+  fc = vec4(1,1,1,1);
+}`;
+
+// ── 2D Chess shader ──
+
+const FS2DC = `#version 300 es
+precision highp float;
+
+uniform vec4  u_o, u_u, u_v;
+uniform vec2  u_res;
+uniform float u_zoom;
+uniform int   u_iter;
+uniform int   u_fracType;
+uniform vec4  u_qc;
+uniform float u_sqSize;
+
+out vec4 fc;
+
+void main(){
+  vec2 uv = (gl_FragCoord.xy - .5*u_res) / min(u_res.x, u_res.y);
+  uv *= 2.0 / u_zoom;
+  vec4 p = u_o + uv.x*u_u + uv.y*u_v;
+
+  float a = p.x, b = p.y, c = p.z, d = p.w;
+  int n = 0;
+
+  if(u_fracType == 0){
+    float zr = a, zi = b, cr = c, ci = d;
+    for(int i=0; i<2048; i++){
+      if(i >= u_iter) break;
+      if(zr*zr + zi*zi > 256.0) break;
+      float tr = zr*zr - zi*zi + cr;
+      zi = 2.0*zr*zi + ci;
+      zr = tr;
+      n++;
+    }
+    a = zr; b = zi;
+  } else {
+    for(int i=0; i<2048; i++){
+      if(i >= u_iter) break;
+      if(a*a+b*b+c*c+d*d > 256.0) break;
+      float na = a*a - b*b - c*c - d*d + u_qc.x;
+      float nb = 2.0*a*b + u_qc.y;
+      float nc = 2.0*a*c + u_qc.z;
+      float nd = 2.0*a*d + u_qc.w;
+      a = na; b = nb; c = nc; d = nd;
+      n++;
+    }
+  }
+
+  float chess;
+  if(n >= u_iter){
+    // Interior: checkerboard from final z position
+    float cx = floor(a / u_sqSize);
+    float cy = floor(b / u_sqSize);
+    chess = mod(cx + cy, 2.0);
+  } else {
+    // Exterior: smooth iteration count + angle of escaped z
+    float mag2 = a*a + b*b;
+    float sn = float(n) + 1.0 - log2(max(log2(mag2) * 0.5, 1e-6));
+    float angle = atan(b, a);
+    float cx = floor(sn / u_sqSize);
+    float cy = floor(angle / u_sqSize);
+    chess = mod(cx + cy, 2.0);
+  }
+
+  vec3 col = chess > 0.5 ? vec3(0.92, 0.87, 0.78) : vec3(0.12, 0.10, 0.08);
+  fc = vec4(col, 1);
+}`;
+
 // ── Compile & link ──
 
 function mkShader(type, src) {
@@ -517,6 +709,37 @@ gl.enableVertexAttribArray(0);
 gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 gl.bindVertexArray(null);
 
+// ── 2D Interactive Julia program ──
+const progDI = mkProg(VS2, FS2DI);
+const ulocDI = {};
+['u_center','u_z0','u_res','u_zoom','u_iter','u_pal','u_mbrot'].forEach(n => ulocDI[n] = gl.getUniformLocation(progDI, n));
+
+// ── Mandelbrot mask program + FBO ──
+const progMB = mkProg(VS2, FS_MBROT);
+const ulocMB = {};
+['u_center','u_res','u_zoom','u_iter'].forEach(n => ulocMB[n] = gl.getUniformLocation(progMB, n));
+
+const mbrotTex = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, mbrotTex);
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+const mbrotFBO = gl.createFramebuffer();
+gl.bindFramebuffer(gl.FRAMEBUFFER, mbrotFBO);
+gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, mbrotTex, 0);
+gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+let mbrotW = 0, mbrotH = 0;
+let mbrotCenter = [NaN, NaN], mbrotZoom = NaN, mbrotIter = 0;
+
+// ── 2D Chess program ──
+const progDC = mkProg(VS2, FS2DC);
+const ulocDC = {};
+['u_o','u_u','u_v','u_res','u_zoom','u_iter','u_fracType','u_qc','u_sqSize'].forEach(n => ulocDC[n] = gl.getUniformLocation(progDC, n));
+
 function render2d() {
   const dpr = devicePixelRatio || 1;
   const w = Math.round(c2d.clientWidth  * dpr);
@@ -541,6 +764,165 @@ function render2d() {
 
   gl.bindVertexArray(vao);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+// ── 2D Chess renderer ──
+
+function render2dc() {
+  const dpr = devicePixelRatio || 1;
+  const w = Math.round(c2d.clientWidth  * dpr);
+  const h = Math.round(c2d.clientHeight * dpr);
+  if (w < 1 || h < 1) return;
+  if (c2d.width !== w || c2d.height !== h) {
+    c2d.width  = w;
+    c2d.height = h;
+  }
+  gl.viewport(0, 0, w, h);
+
+  gl.useProgram(progDC);
+  gl.uniform4fv(ulocDC.u_o, S.origin);
+  gl.uniform4fv(ulocDC.u_u, S.basis[0]);
+  gl.uniform4fv(ulocDC.u_v, S.basis[1]);
+  gl.uniform2f(ulocDC.u_res, w, h);
+  gl.uniform1f(ulocDC.u_zoom, S.zoom);
+  gl.uniform1i(ulocDC.u_iter, S.maxIter);
+  gl.uniform1i(ulocDC.u_fracType, S.fracType);
+  gl.uniform4fv(ulocDC.u_qc, S.qc);
+  gl.uniform1f(ulocDC.u_sqSize, S.chessSize);
+
+  gl.bindVertexArray(vao);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+// ── 2D Interactive Julia renderer ──
+
+const overlayC = document.getElementById('view2di-overlay');
+const overlayCtx = overlayC.getContext('2d');
+
+function render2di() {
+  const dpr = devicePixelRatio || 1;
+  const w = Math.round(c2d.clientWidth  * dpr);
+  const h = Math.round(c2d.clientHeight * dpr);
+  if (w < 1 || h < 1) return;
+  if (c2d.width !== w || c2d.height !== h) {
+    c2d.width  = w;
+    c2d.height = h;
+  }
+
+  // Recompute Mandelbrot mask only when view changes
+  const effIter = Math.min(S.maxIter, 128);
+  if (w !== mbrotW || h !== mbrotH ||
+      mbrotCenter[0] !== S.diCenter[0] || mbrotCenter[1] !== S.diCenter[1] ||
+      mbrotZoom !== S.zoom || mbrotIter !== effIter) {
+    if (w !== mbrotW || h !== mbrotH) {
+      gl.bindTexture(gl.TEXTURE_2D, mbrotTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      mbrotW = w; mbrotH = h;
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, mbrotFBO);
+    gl.viewport(0, 0, w, h);
+    gl.useProgram(progMB);
+    gl.uniform2f(ulocMB.u_center, S.diCenter[0], S.diCenter[1]);
+    gl.uniform2f(ulocMB.u_res, w, h);
+    gl.uniform1f(ulocMB.u_zoom, S.zoom);
+    gl.uniform1i(ulocMB.u_iter, S.maxIter);
+    gl.bindVertexArray(vao);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    mbrotCenter = [S.diCenter[0], S.diCenter[1]];
+    mbrotZoom = S.zoom;
+    mbrotIter = effIter;
+  }
+
+  gl.viewport(0, 0, w, h);
+
+  // Compute z₀ from mouse position (offset from screen center)
+  const minDim = Math.min(w, h);
+  const z0r =  (S.mouseScreenX * dpr - w / 2) / minDim * 2 / S.zoom;
+  const z0i = -(S.mouseScreenY * dpr - h / 2) / minDim * 2 / S.zoom;
+
+  gl.useProgram(progDI);
+  gl.uniform2f(ulocDI.u_center, S.diCenter[0], S.diCenter[1]);
+  gl.uniform2f(ulocDI.u_z0, z0r, z0i);
+  gl.uniform2f(ulocDI.u_res, w, h);
+  gl.uniform1f(ulocDI.u_zoom, S.zoom);
+  gl.uniform1i(ulocDI.u_iter, S.maxIter);
+  gl.uniform1i(ulocDI.u_pal, S.palette);
+
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, mbrotTex);
+  gl.uniform1i(ulocDI.u_mbrot, 0);
+
+  gl.bindVertexArray(vao);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+  // Draw overlay (escape orbit lines)
+  renderOverlay(z0r, z0i);
+}
+
+function renderOverlay(z0r, z0i) {
+  const dpr = devicePixelRatio || 1;
+  const w = Math.round(overlayC.clientWidth  * dpr);
+  const h = Math.round(overlayC.clientHeight * dpr);
+  if (w < 1 || h < 1) return;
+  if (overlayC.width !== w || overlayC.height !== h) {
+    overlayC.width  = w;
+    overlayC.height = h;
+  }
+  overlayCtx.clearRect(0, 0, w, h);
+
+  const minDim = Math.min(w, h);
+  const scale  = S.zoom / 2 * minDim;
+
+  // Mouse position in device pixels
+  const mx = S.mouseScreenX * dpr;
+  const my = S.mouseScreenY * dpr;
+
+  // c at mouse pixel = uv(mouse) + viewCenter
+  const cr = z0r + S.diCenter[0];
+  const ci = z0i + S.diCenter[1];
+
+  // Compute orbit: z -> z^2 + c, starting from z₀
+  let zr = z0r, zi = z0i;
+  const pts = [[zr, zi]];
+  const maxOrbit = Math.min(S.maxIter, 500);
+  for (let i = 0; i < maxOrbit; i++) {
+    const tr = zr * zr - zi * zi + cr;
+    zi = 2.0 * zr * zi + ci;
+    zr = tr;
+    pts.push([zr, zi]);
+    if (zr * zr + zi * zi > 4.0) break;
+  }
+
+  // Map orbit point to screen: z₀ renders at mouse cursor, others relative
+  function oToS(re, im) {
+    return [(re - z0r) * scale + mx, my - (im - z0i) * scale];
+  }
+
+  if (pts.length > 1) {
+    // Draw line segments
+    overlayCtx.strokeStyle = 'rgba(50, 130, 255, 0.8)';
+    overlayCtx.lineWidth   = 1.5 * dpr;
+    overlayCtx.lineJoin    = 'round';
+    overlayCtx.lineCap     = 'round';
+    overlayCtx.beginPath();
+    let [sx, sy] = oToS(pts[0][0], pts[0][1]);
+    overlayCtx.moveTo(sx, sy);
+    for (let i = 1; i < pts.length; i++) {
+      [sx, sy] = oToS(pts[i][0], pts[i][1]);
+      overlayCtx.lineTo(sx, sy);
+    }
+    overlayCtx.stroke();
+
+    // Draw dots at each iteration point
+    overlayCtx.fillStyle = 'rgba(80, 160, 255, 0.9)';
+    for (const [re, im] of pts) {
+      const [dx, dy] = oToS(re, im);
+      overlayCtx.beginPath();
+      overlayCtx.arc(dx, dy, 2.5 * dpr, 0, Math.PI * 2);
+      overlayCtx.fill();
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -886,10 +1268,22 @@ document.addEventListener('keydown', e => {
   let ok = true;
   const step = MOVE / S.zoom;
   switch (e.key) {
-    case 'ArrowLeft':  trans4(S.origin, S.basis, 0, -step); break;
-    case 'ArrowRight': trans4(S.origin, S.basis, 0,  step); break;
-    case 'ArrowUp':    trans4(S.origin, S.basis, 1,  step); break;
-    case 'ArrowDown':  trans4(S.origin, S.basis, 1, -step); break;
+    case 'ArrowLeft':
+      if (S.mode === '2di') S.diCenter[0] -= step;
+      else trans4(S.origin, S.basis, 0, -step);
+      break;
+    case 'ArrowRight':
+      if (S.mode === '2di') S.diCenter[0] += step;
+      else trans4(S.origin, S.basis, 0,  step);
+      break;
+    case 'ArrowUp':
+      if (S.mode === '2di') S.diCenter[1] += step;
+      else trans4(S.origin, S.basis, 1,  step);
+      break;
+    case 'ArrowDown':
+      if (S.mode === '2di') S.diCenter[1] -= step;
+      else trans4(S.origin, S.basis, 1, -step);
+      break;
     case 'w': case 'W': trans4(S.origin, S.basis, 2,  step); break;
     case 's': case 'S': trans4(S.origin, S.basis, 2, -step); break;
     case 'q': case 'Q': trans4(S.origin, S.basis, 3,  step); break;
@@ -904,9 +1298,11 @@ document.addEventListener('keydown', e => {
     case '4': S.plane = 3; break;
     case '5': S.plane = 4; break;
     case '6': S.plane = 5; break;
+    case '[': S.chessSize = Math.max(S.chessSize / 1.5, 0.005); break;
+    case ']': S.chessSize = Math.min(S.chessSize * 1.5, 5.0); break;
     case 'Tab':
       e.preventDefault();
-      setMode(S.mode === '2d' ? '3d' : '2d');
+      setMode(S.mode === '2d' ? '2di' : S.mode === '2di' ? '2dc' : S.mode === '2dc' ? '3d' : '2d');
       break;
     case 'f': case 'F':
       S.fracType = S.fracType === 0 ? 1 : 0;
@@ -931,12 +1327,17 @@ document.addEventListener('keyup', e => held.delete(e.key));
 let drag = false, dragX = 0, dragY = 0;
 
 c2d.addEventListener('mousedown', e => {
-  if (S.mode !== '2d') return;
+  if (S.mode !== '2d' && S.mode !== '2dc') return;
   drag = true; dragX = e.clientX; dragY = e.clientY;
   c2d.style.cursor = 'grabbing';
 });
 window.addEventListener('mousemove', e => {
-  if (!drag || S.mode !== '2d') return;
+  // Track mouse position for 2di mode (z₀ control)
+  if (S.mode === '2di') {
+    S.mouseScreenX = e.clientX;
+    S.mouseScreenY = e.clientY;
+  }
+  if (!drag || (S.mode !== '2d' && S.mode !== '2dc')) return;
   const dx = e.clientX - dragX, dy = e.clientY - dragY;
   const sc = 2 / S.zoom / Math.min(c2d.clientWidth, c2d.clientHeight);
   trans4(S.origin, S.basis, 0, -dx * sc);
@@ -947,7 +1348,7 @@ window.addEventListener('mouseup', () => { drag = false; c2d.style.cursor = 'cro
 
 // Zoom at cursor
 c2d.addEventListener('wheel', e => {
-  if (S.mode !== '2d') return;
+  if (S.mode !== '2d' && S.mode !== '2di' && S.mode !== '2dc') return;
   e.preventDefault();
   const factor = e.deltaY < 0 ? ZFAC : 1/ZFAC;
   const rect = c2d.getBoundingClientRect();
@@ -956,8 +1357,13 @@ c2d.addEventListener('wheel', e => {
   const py = -(e.clientY - rect.top  - rect.height / 2) / minDim;
   const oldZ = S.zoom, newZ = Math.min(Math.max(oldZ * factor, 1e-4), 1e5);
   const ds = 2 * (1/oldZ - 1/newZ);
-  for (let i = 0; i < 4; i++)
-    S.origin[i] += px * ds * S.basis[0][i] + py * ds * S.basis[1][i];
+  if (S.mode === '2di') {
+    S.diCenter[0] += px * ds;
+    S.diCenter[1] += py * ds;
+  } else {
+    for (let i = 0; i < 4; i++)
+      S.origin[i] += px * ds * S.basis[0][i] + py * ds * S.basis[1][i];
+  }
   S.zoom = newZ;
 }, { passive: false });
 
@@ -965,7 +1371,7 @@ c2d.addEventListener('wheel', e => {
 
 let tCache = [], prevPinch = 0;
 c2d.addEventListener('touchstart', e => {
-  if (S.mode !== '2d') return;
+  if (S.mode !== '2d' && S.mode !== '2dc') return;
   e.preventDefault();
   tCache = [...e.touches];
   if (tCache.length === 2)
@@ -973,7 +1379,7 @@ c2d.addEventListener('touchstart', e => {
 }, { passive: false });
 
 c2d.addEventListener('touchmove', e => {
-  if (S.mode !== '2d') return;
+  if (S.mode !== '2d' && S.mode !== '2dc') return;
   e.preventDefault();
   if (e.touches.length === 1 && tCache.length >= 1) {
     const dx = e.touches[0].clientX - tCache[0].clientX;
@@ -996,7 +1402,7 @@ c2d.addEventListener('touchend', e => { tCache = [...e.touches]; prevPinch = 0; 
 
 const panelEl = document.getElementById('panel');
 const REPEAT_ACTS = new Set([
-  'rot-','rot+','left','right','up','down','in','out','4d+','4d-','zoom+','zoom-'
+  'rot-','rot+','left','right','up','down','in','out','4d+','4d-','zoom+','zoom-','chess+','chess-'
 ]);
 let _rid = 0;
 
@@ -1005,10 +1411,22 @@ function execAct(act) {
   switch (act) {
     case 'rot-': rotate4(S.basis, PLANES[S.plane].a, PLANES[S.plane].b, -ROT); break;
     case 'rot+': rotate4(S.basis, PLANES[S.plane].a, PLANES[S.plane].b,  ROT); break;
-    case 'left':  trans4(S.origin, S.basis, 0, -step); break;
-    case 'right': trans4(S.origin, S.basis, 0,  step); break;
-    case 'up':    trans4(S.origin, S.basis, 1,  step); break;
-    case 'down':  trans4(S.origin, S.basis, 1, -step); break;
+    case 'left':
+      if (S.mode === '2di') S.diCenter[0] -= step;
+      else trans4(S.origin, S.basis, 0, -step);
+      break;
+    case 'right':
+      if (S.mode === '2di') S.diCenter[0] += step;
+      else trans4(S.origin, S.basis, 0,  step);
+      break;
+    case 'up':
+      if (S.mode === '2di') S.diCenter[1] += step;
+      else trans4(S.origin, S.basis, 1,  step);
+      break;
+    case 'down':
+      if (S.mode === '2di') S.diCenter[1] -= step;
+      else trans4(S.origin, S.basis, 1, -step);
+      break;
     case 'in':    trans4(S.origin, S.basis, 2,  step); break;
     case 'out':   trans4(S.origin, S.basis, 2, -step); break;
     case '4d+':   trans4(S.origin, S.basis, 3,  step); break;
@@ -1022,6 +1440,8 @@ function execAct(act) {
     case 'thresh+': S.threshold = Math.min(S.threshold + 0.1, 2.0); break;
     case 'thresh-': S.threshold = Math.max(S.threshold - 0.1, 0.0); break;
     case 'jitter':  S.jitter = !S.jitter; break;
+    case 'chess+': S.chessSize = Math.min(S.chessSize * 1.5, 5.0); break;
+    case 'chess-': S.chessSize = Math.max(S.chessSize / 1.5, 0.005); break;
     case 'reset': resetView(); break;
     case 'help':
       S.showHelp = !S.showHelp;
@@ -1073,10 +1493,16 @@ const mBtns  = panelEl.querySelectorAll('.mbtn');
 const pBtns  = panelEl.querySelectorAll('.pbtn');
 const fBtns  = panelEl.querySelectorAll('.fbtn');
 const quatSection = document.getElementById('quat-section');
+const pvChessRow = document.getElementById('pv-chess-row');
+const pvChess = document.getElementById('pv-chess');
+const fractypeSection = document.getElementById('fractype-section');
+const rotationSection = document.getElementById('rotation-section');
+const depthSection = document.getElementById('depth-section');
 const qcValEls = [0,1,2,3].map(i => document.getElementById('pv-qc'+i));
 const qcSliders = document.querySelectorAll('.qc-slider');
 
 function updatePanel() {
+  const is2di = (S.mode === '2di');
   mBtns.forEach(b => b.classList.toggle('sel', b.dataset.mode === S.mode));
   fBtns.forEach(b => b.classList.toggle('sel', +b.dataset.ft === S.fracType));
   pBtns.forEach(b => b.classList.toggle('sel', +b.dataset.pl === S.plane));
@@ -1087,13 +1513,21 @@ function updatePanel() {
   pvQ3dRow.style.display = S.mode === '3d' ? '' : 'none';
   pvThreshRow.style.display = S.mode === '3d' ? '' : 'none';
   pvJitterRow.style.display = S.mode === '3d' ? '' : 'none';
+  pvChessRow.style.display = S.mode === '2dc' ? '' : 'none';
   if (pvThresh) pvThresh.textContent = S.threshold.toFixed(1);
   if (pvJitterBtn) pvJitterBtn.textContent = S.jitter ? 'On' : 'Off';
+  if (pvChess) pvChess.textContent = S.chessSize.toFixed(3);
+  // Hide sections not applicable to 2di mode
+  fractypeSection.style.display = is2di ? 'none' : '';
+  rotationSection.style.display = is2di ? 'none' : '';
+  depthSection.style.display = is2di ? 'none' : '';
   // Quaternion c section
-  quatSection.style.display = S.fracType === 1 ? '' : 'none';
-  for (let i = 0; i < 4; i++) {
-    qcValEls[i].textContent = S.qc[i].toFixed(2);
-    qcSliders[i].value = S.qc[i];
+  quatSection.style.display = (!is2di && S.fracType === 1) ? '' : 'none';
+  if (!is2di) {
+    for (let i = 0; i < 4; i++) {
+      qcValEls[i].textContent = S.qc[i].toFixed(2);
+      qcSliders[i].value = S.qc[i];
+    }
   }
 }
 
@@ -1121,13 +1555,44 @@ document.querySelectorAll('#presets button').forEach(btn => {
 
 function setMode(m) {
   S.mode = m;
-  c2d.style.display = m === '2d' ? 'block' : 'none';
-  document.getElementById('view3d').style.display = m === '3d' ? 'block' : 'none';
-  if (m === '3d') { init3d(); orbitCtrl.enabled = true; }
+  const is2d  = (m === '2d');
+  const is2di = (m === '2di');
+  const is2dc = (m === '2dc');
+  const is3d  = (m === '3d');
+  c2d.style.display = (is2d || is2di || is2dc) ? 'block' : 'none';
+  document.getElementById('view3d').style.display = is3d ? 'block' : 'none';
+  overlayC.style.display = is2di ? 'block' : 'none';
+  if (is3d) { init3d(); orbitCtrl.enabled = true; }
   else if (orbitCtrl) orbitCtrl.enabled = false;
+  if (is2di) {
+    c2d.style.cursor = 'crosshair';
+    S.mouseScreenX = window.innerWidth / 2;
+    S.mouseScreenY = window.innerHeight / 2;
+  }
+  if (is2dc) {
+    c2d.style.cursor = 'default';
+    S.origin = [0, 0, -0.5, 0];
+    S.basis  = [[0,0,1,0],[0,0,0,1],[1,0,0,0],[0,1,0,0]];
+    S.zoom   = 0.8;
+    S.chessSize = 0.05;
+  }
 }
 
 function resetView() {
+  if (S.mode === '2di') {
+    S.diCenter = [-0.5, 0];
+    S.zoom = 0.8;
+    S.mouseScreenX = window.innerWidth / 2;
+    S.mouseScreenY = window.innerHeight / 2;
+    return;
+  }
+  if (S.mode === '2dc') {
+    S.origin = [0, 0, -0.5, 0];
+    S.basis  = [[0,0,1,0],[0,0,0,1],[1,0,0,0],[0,1,0,0]];
+    S.zoom   = 0.8;
+    S.chessSize = 0.05;
+    return;
+  }
   if (S.fracType === 0) {
     S.origin = [0, 0, -0.7269, 0.1889];
   } else {
@@ -1160,6 +1625,53 @@ function updateHUD() {
   fpsCnt++;
   const now = performance.now();
   if (now - fpsT > 600) { fpsVal = Math.round(fpsCnt * 1000 / (now - fpsT)); fpsCnt = 0; fpsT = now; }
+
+  if (S.mode === '2di') {
+    // Compute z₀ for display
+    const cw = c2d.clientWidth, ch = c2d.clientHeight;
+    const minD = Math.min(cw, ch);
+    const z0r =  (S.mouseScreenX - cw / 2) / minD * 2 / S.zoom;
+    const z0i = -(S.mouseScreenY - ch / 2) / minD * 2 / S.zoom;
+    hudEl.innerHTML =
+      `<div class="hud-mode m2d" style="color:#0f8">2D JULIA</div>` +
+      `<div><span class="hf">Interactive Julia Explorer</span></div>` +
+      `<div><span class="hl">z\u2080 =</span> <span class="hv">${f4(z0r)} ${z0i<0?'\u2212':'+'}${f4(Math.abs(z0i))}i</span></div>` +
+      `<div><span class="hl">c center =</span> <span class="hv">${f4(S.diCenter[0])} ${S.diCenter[1]<0?'\u2212':'+'}${f4(Math.abs(S.diCenter[1]))}i</span></div>` +
+      `<div><span class="hl">zoom</span> <span class="hv">\u00D7${S.zoom < 1 ? S.zoom.toFixed(3) : S.zoom.toFixed(1)}</span>` +
+      ` <span class="hl">iter</span> <span class="hv">${S.maxIter}</span>` +
+      ` <span class="hl">pal</span> <span class="hv">${PAL_NAMES[S.palette]}</span></div>` +
+      `<div><span class="hfps">${fpsVal} fps</span> <span class="hdim">\u2014 mouse controls z\u2080</span></div>`;
+    qBadge.textContent = '';
+    return;
+  }
+
+  if (S.mode === '2dc') {
+    const o = S.origin;
+    const fracLabel = S.fracType === 0 ? 'Complex z\u00B2+c' : 'Quat q\u00B2+c';
+    const p = PLANES[S.plane];
+    const bDesc = `<span class="hdim">\u2192${axisLabel(S.basis[0])} \u2191${axisLabel(S.basis[1])}</span>`;
+    let posInfo;
+    if (S.fracType === 0) {
+      posInfo =
+        `<div><span class="hl">z\u2080 =</span> <span class="hv">${f4(o[0])} ${o[1]<0?'\u2212':'+'}${f4(Math.abs(o[1]))}i</span></div>` +
+        `<div><span class="hl">c&nbsp; =</span> <span class="hv">${f4(o[2])} ${o[3]<0?'\u2212':'+'}${f4(Math.abs(o[3]))}i</span></div>`;
+    } else {
+      posInfo =
+        `<div><span class="hl">q =</span> <span class="hv">(${f4(o[0])}, ${f4(o[1])}, ${f4(o[2])}, ${f4(o[3])})</span></div>` +
+        `<div><span class="hl">c =</span> <span class="hv">(${S.qc[0].toFixed(2)}, ${S.qc[1].toFixed(2)}, ${S.qc[2].toFixed(2)}, ${S.qc[3].toFixed(2)})</span></div>`;
+    }
+    hudEl.innerHTML =
+      `<div class="hud-mode m2d" style="color:#f8a">2D CHESS</div>` +
+      `<div><span class="hf">${fracLabel}</span></div>` +
+      posInfo +
+      `<div><span class="hl">zoom</span> <span class="hv">\u00D7${S.zoom < 1 ? S.zoom.toFixed(3) : S.zoom.toFixed(1)}</span>` +
+      ` <span class="hl">iter</span> <span class="hv">${S.maxIter}</span>` +
+      ` <span class="hl">sq</span> <span class="hv">${S.chessSize.toFixed(3)}</span></div>` +
+      `<div><span class="hl">rot</span> <span class="hp">${p.name}</span> <span class="hdim">${p.desc}</span> ${bDesc}</div>` +
+      `<div><span class="hfps">${fpsVal} fps</span> <span class="hdim">\u2014 press</span> <span class="hkey">H</span> <span class="hdim">for help</span></div>`;
+    qBadge.textContent = '';
+    return;
+  }
 
   const o = S.origin;
   const p = PLANES[S.plane];
@@ -1208,13 +1720,18 @@ function f4(v) { return v.toFixed(4); }
 
 function animate() {
   requestAnimationFrame(animate);
-  if (S.mode === '2d') render2d(); else render3d();
+  if (S.mode === '2d') render2d();
+  else if (S.mode === '2di') render2di();
+  else if (S.mode === '2dc') render2dc();
+  else render3d();
   updateHUD();
   updatePanel();
 }
 
 // Boot
 document.getElementById('loading').style.display = 'none';
+S.mouseScreenX = window.innerWidth / 2;
+S.mouseScreenY = window.innerHeight / 2;
 animate();
 
 </script>
