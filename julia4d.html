@@ -3,10 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
-<title>4D Julia Set Explorer (v2)</title>
+<title>4D Julia Set Explorer</title>
 <style>
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: #060610; color: #bbb; font-family: 'Consolas', 'Menlo', 'Monaco', monospace;
@@ -179,8 +176,9 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: #
   <div class="row"><span style="color:#0f0">Green outline</span> = Mandelbrot set boundary</div>
   <div class="row"><span style="color:#38f">Blue lines</span> = iteration escape path at cursor</div>
   <h3>2D Chess Mode</h3>
-  <div class="row">Checkerboard shifted by first iteration z&rarr;z&sup2;+c</div>
+  <div class="row">Two styles: <b>Escape</b> (iteration count + angle) and <b>Position</b> (last bounded z)</div>
   <div class="row"><span class="k">[</span><span class="k">]</span> Decrease / increase square size</div>
+  <div class="row"><span class="k">\</span> Toggle chess style (Escape / Position)</div>
   <p style="margin-top:16px;color:#445;font-size:11px;">
     Tip: The Mandelbrot set is the c-plane cross-section at z&#8320; = 0.
     Rotate in the X&ndash;R or Y&ndash;I planes to smoothly blend between Julia and Mandelbrot views.
@@ -245,6 +243,7 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: #
       <button class="abtn" data-act="rot-">&laquo; Rotate</button>
       <button class="abtn" data-act="rot+">Rotate &raquo;</button>
     </div>
+    <div id="pv-basis" style="font-size:11px;color:#bcd;padding:4px 6px;line-height:1.5;background:rgba(255,255,255,0.04);border-radius:3px;margin-top:4px"></div>
   </div>
   <!-- Movement -->
   <div class="ps">
@@ -292,6 +291,10 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: #
       <button class="cbtn" data-act="chess-">&minus;</button>
       <button class="cbtn" data-act="chess+">+</button>
       <span class="cval" id="pv-chess"></span>
+    </div>
+    <div class="crow" id="pv-chess-style-row" style="display:none">
+      <span class="clbl">Style</span>
+      <button class="abtn" data-act="chess-style" style="flex:1" id="pv-chess-style">Escape</button>
     </div>
     <div class="crow" id="pv-q3d-row" style="display:none">
       <span class="clbl">3D Qual</span>
@@ -401,13 +404,15 @@ const S = {
   mode: '2d',       // '2d' | '3d'
   plane: 0,         // active rotation plane index
   palette: 0,
-  q3d: 1,           // quality preset index for 3D
+  q3d: 3,           // quality preset index for 3D
   showHelp: false,
   fracType: 0,      // 0 = Complex z²+c, 1 = Quaternion q²+c
   qc: [-0.2, 0.8, 0.0, 0.0],  // quaternion c constant
   threshold: 0.5,   // surface threshold (3D)
   jitter: false,    // dither ray sampling to reduce banding
   chessSize: 0.05,         // checkerboard square size for 2D Chess mode
+  chessStyle: 0,           // 0 = escape (count+angle), 1 = position (last bounded z)
+  rotAngles: [0,0,0,0,0,0], // accumulated rotation per plane (radians)
   diCenter: [-0.5, 0],    // c-plane center for 2D Interactive Julia mode
   mouseScreenX: 0,         // mouse X in CSS pixels (for 2di mode)
   mouseScreenY: 0,         // mouse Y in CSS pixels (for 2di mode)
@@ -620,6 +625,7 @@ uniform int   u_iter;
 uniform int   u_fracType;
 uniform vec4  u_qc;
 uniform float u_sqSize;
+uniform int   u_style;
 
 out vec4 fc;
 
@@ -630,12 +636,14 @@ void main(){
 
   float a = p.x, b = p.y, c = p.z, d = p.w;
   int n = 0;
+  float lr = a, li = b;
 
   if(u_fracType == 0){
     float zr = a, zi = b, cr = c, ci = d;
     for(int i=0; i<2048; i++){
       if(i >= u_iter) break;
       if(zr*zr + zi*zi > 256.0) break;
+      lr = zr; li = zi;
       float tr = zr*zr - zi*zi + cr;
       zi = 2.0*zr*zi + ci;
       zr = tr;
@@ -646,6 +654,7 @@ void main(){
     for(int i=0; i<2048; i++){
       if(i >= u_iter) break;
       if(a*a+b*b+c*c+d*d > 256.0) break;
+      lr = a; li = b;
       float na = a*a - b*b - c*c - d*d + u_qc.x;
       float nb = 2.0*a*b + u_qc.y;
       float nc = 2.0*a*c + u_qc.z;
@@ -656,13 +665,18 @@ void main(){
   }
 
   float chess;
-  if(n >= u_iter){
-    // Interior: checkerboard from final z position
+  if(u_style == 1){
+    // Position style: last bounded z displaces original position
+    float cx = floor((p.x + lr) / u_sqSize);
+    float cy = floor((p.y + li) / u_sqSize);
+    chess = mod(cx + cy, 2.0);
+  } else if(n >= u_iter){
+    // Escape style, interior: checkerboard from final z position
     float cx = floor(a / u_sqSize);
     float cy = floor(b / u_sqSize);
     chess = mod(cx + cy, 2.0);
   } else {
-    // Exterior: smooth iteration count + angle of escaped z
+    // Escape style, exterior: smooth iteration count + angle
     float mag2 = a*a + b*b;
     float sn = float(n) + 1.0 - log2(max(log2(mag2) * 0.5, 1e-6));
     float angle = atan(b, a);
@@ -738,7 +752,7 @@ let mbrotCenter = [NaN, NaN], mbrotZoom = NaN, mbrotIter = 0;
 // ── 2D Chess program ──
 const progDC = mkProg(VS2, FS2DC);
 const ulocDC = {};
-['u_o','u_u','u_v','u_res','u_zoom','u_iter','u_fracType','u_qc','u_sqSize'].forEach(n => ulocDC[n] = gl.getUniformLocation(progDC, n));
+['u_o','u_u','u_v','u_res','u_zoom','u_iter','u_fracType','u_qc','u_sqSize','u_style'].forEach(n => ulocDC[n] = gl.getUniformLocation(progDC, n));
 
 function render2d() {
   const dpr = devicePixelRatio || 1;
@@ -789,6 +803,7 @@ function render2dc() {
   gl.uniform1i(ulocDC.u_fracType, S.fracType);
   gl.uniform4fv(ulocDC.u_qc, S.qc);
   gl.uniform1f(ulocDC.u_sqSize, S.chessSize);
+  gl.uniform1i(ulocDC.u_style, S.chessStyle);
 
   gl.bindVertexArray(vao);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -1290,8 +1305,8 @@ document.addEventListener('keydown', e => {
     case 'e': case 'E': trans4(S.origin, S.basis, 3, -step); break;
     case '=': case '+': S.zoom = Math.min(S.zoom * ZFAC, 1e5); break;
     case '-':           S.zoom = Math.max(S.zoom / ZFAC, 1e-4); break;
-    case ',': case '<': rotate4(S.basis, PLANES[S.plane].a, PLANES[S.plane].b, -ROT); break;
-    case '.': case '>': rotate4(S.basis, PLANES[S.plane].a, PLANES[S.plane].b,  ROT); break;
+    case ',': case '<': rotate4(S.basis, PLANES[S.plane].a, PLANES[S.plane].b, -ROT); S.rotAngles[S.plane] -= ROT; break;
+    case '.': case '>': rotate4(S.basis, PLANES[S.plane].a, PLANES[S.plane].b,  ROT); S.rotAngles[S.plane] += ROT; break;
     case '1': S.plane = 0; break;
     case '2': S.plane = 1; break;
     case '3': S.plane = 2; break;
@@ -1300,6 +1315,7 @@ document.addEventListener('keydown', e => {
     case '6': S.plane = 5; break;
     case '[': S.chessSize = Math.max(S.chessSize / 1.5, 0.005); break;
     case ']': S.chessSize = Math.min(S.chessSize * 1.5, 5.0); break;
+    case '\\': S.chessStyle = 1 - S.chessStyle; break;
     case 'Tab':
       e.preventDefault();
       setMode(S.mode === '2d' ? '2di' : S.mode === '2di' ? '2dc' : S.mode === '2dc' ? '3d' : '2d');
@@ -1409,8 +1425,8 @@ let _rid = 0;
 function execAct(act) {
   const step = MOVE / S.zoom;
   switch (act) {
-    case 'rot-': rotate4(S.basis, PLANES[S.plane].a, PLANES[S.plane].b, -ROT); break;
-    case 'rot+': rotate4(S.basis, PLANES[S.plane].a, PLANES[S.plane].b,  ROT); break;
+    case 'rot-': rotate4(S.basis, PLANES[S.plane].a, PLANES[S.plane].b, -ROT); S.rotAngles[S.plane] -= ROT; break;
+    case 'rot+': rotate4(S.basis, PLANES[S.plane].a, PLANES[S.plane].b,  ROT); S.rotAngles[S.plane] += ROT; break;
     case 'left':
       if (S.mode === '2di') S.diCenter[0] -= step;
       else trans4(S.origin, S.basis, 0, -step);
@@ -1442,6 +1458,7 @@ function execAct(act) {
     case 'jitter':  S.jitter = !S.jitter; break;
     case 'chess+': S.chessSize = Math.min(S.chessSize * 1.5, 5.0); break;
     case 'chess-': S.chessSize = Math.max(S.chessSize / 1.5, 0.005); break;
+    case 'chess-style': S.chessStyle = 1 - S.chessStyle; break;
     case 'reset': resetView(); break;
     case 'help':
       S.showHelp = !S.showHelp;
@@ -1495,6 +1512,9 @@ const fBtns  = panelEl.querySelectorAll('.fbtn');
 const quatSection = document.getElementById('quat-section');
 const pvChessRow = document.getElementById('pv-chess-row');
 const pvChess = document.getElementById('pv-chess');
+const pvChessStyleRow = document.getElementById('pv-chess-style-row');
+const pvChessStyle = document.getElementById('pv-chess-style');
+const pvBasis = document.getElementById('pv-basis');
 const fractypeSection = document.getElementById('fractype-section');
 const rotationSection = document.getElementById('rotation-section');
 const depthSection = document.getElementById('depth-section');
@@ -1514,13 +1534,26 @@ function updatePanel() {
   pvThreshRow.style.display = S.mode === '3d' ? '' : 'none';
   pvJitterRow.style.display = S.mode === '3d' ? '' : 'none';
   pvChessRow.style.display = S.mode === '2dc' ? '' : 'none';
+  pvChessStyleRow.style.display = S.mode === '2dc' ? '' : 'none';
   if (pvThresh) pvThresh.textContent = S.threshold.toFixed(1);
   if (pvJitterBtn) pvJitterBtn.textContent = S.jitter ? 'On' : 'Off';
   if (pvChess) pvChess.textContent = S.chessSize.toFixed(3);
+  if (pvChessStyle) pvChessStyle.textContent = S.chessStyle === 0 ? 'Escape' : 'Position';
   // Hide sections not applicable to 2di mode
   fractypeSection.style.display = is2di ? 'none' : '';
   rotationSection.style.display = is2di ? 'none' : '';
   depthSection.style.display = is2di ? 'none' : '';
+  // Rotation angles display
+  if (!is2di) {
+    const toDeg = 180 / Math.PI;
+    let bHtml = '';
+    for (let i = 0; i < 6; i++) {
+      const deg = S.rotAngles[i] * toDeg;
+      const col = i === S.plane ? '#fff' : (Math.abs(deg) > 0.1 ? '#9bd' : '#556');
+      bHtml += `<span style="color:${col}">${PLANES[i].name} ${deg.toFixed(1)}\u00B0</span>  `;
+    }
+    pvBasis.innerHTML = bHtml;
+  }
   // Quaternion c section
   quatSection.style.display = (!is2di && S.fracType === 1) ? '' : 'none';
   if (!is2di) {
@@ -1539,6 +1572,7 @@ document.querySelectorAll('#presets button').forEach(btn => {
     if (!p) return;
     S.origin = [...p.o];
     S.basis  = p.basis ? p.basis.map(r=>[...r]) : eye4();
+    S.rotAngles = [0,0,0,0,0,0];
     S.zoom   = 0.8;
     if (p.fracType !== undefined) {
       S.fracType = p.fracType;
@@ -1573,6 +1607,7 @@ function setMode(m) {
     c2d.style.cursor = 'default';
     S.origin = [0, 0, -0.5, 0];
     S.basis  = [[0,0,1,0],[0,0,0,1],[1,0,0,0],[0,1,0,0]];
+    S.rotAngles = [0,0,0,0,0,0];
     S.zoom   = 0.8;
     S.chessSize = 0.05;
   }
@@ -1589,6 +1624,7 @@ function resetView() {
   if (S.mode === '2dc') {
     S.origin = [0, 0, -0.5, 0];
     S.basis  = [[0,0,1,0],[0,0,0,1],[1,0,0,0],[0,1,0,0]];
+    S.rotAngles = [0,0,0,0,0,0];
     S.zoom   = 0.8;
     S.chessSize = 0.05;
     return;
@@ -1599,6 +1635,7 @@ function resetView() {
     S.origin = [0, 0, 0, 0];
   }
   S.basis  = eye4();
+  S.rotAngles = [0,0,0,0,0,0];
   S.zoom   = 0.8;
   S.plane  = 0;
   S.threshold = 0.5;
@@ -1619,6 +1656,17 @@ function axisLabel(v) {
   for (let i = 0; i < 4; i++) { const a = Math.abs(v[i]); if (a > best) { best = a; bi = i; } }
   const sign = v[bi] < 0 ? '-' : '';
   return `${sign}${names[bi]}`;
+}
+function basisDetail(v) {
+  const names = ['X','Y','R','I'];
+  const parts = [];
+  for (let i = 0; i < 4; i++) {
+    if (Math.abs(v[i]) > 0.001) {
+      const s = v[i] > 0 && parts.length ? '+' : '';
+      parts.push(`${s}${v[i].toFixed(2)}${names[i]}`);
+    }
+  }
+  return parts.join('') || '0';
 }
 
 function updateHUD() {
@@ -1648,8 +1696,13 @@ function updateHUD() {
   if (S.mode === '2dc') {
     const o = S.origin;
     const fracLabel = S.fracType === 0 ? 'Complex z\u00B2+c' : 'Quat q\u00B2+c';
-    const p = PLANES[S.plane];
-    const bDesc = `<span class="hdim">\u2192${axisLabel(S.basis[0])} \u2191${axisLabel(S.basis[1])}</span>`;
+    const toDeg = 180 / Math.PI;
+    let rotParts = [];
+    for (let i = 0; i < 6; i++) {
+      const deg = S.rotAngles[i] * toDeg;
+      if (Math.abs(deg) > 0.1) rotParts.push(`${PLANES[i].name}:${deg.toFixed(1)}\u00B0`);
+    }
+    const rotStr = rotParts.length ? rotParts.join(' ') : 'none';
     let posInfo;
     if (S.fracType === 0) {
       posInfo =
@@ -1666,8 +1719,9 @@ function updateHUD() {
       posInfo +
       `<div><span class="hl">zoom</span> <span class="hv">\u00D7${S.zoom < 1 ? S.zoom.toFixed(3) : S.zoom.toFixed(1)}</span>` +
       ` <span class="hl">iter</span> <span class="hv">${S.maxIter}</span>` +
-      ` <span class="hl">sq</span> <span class="hv">${S.chessSize.toFixed(3)}</span></div>` +
-      `<div><span class="hl">rot</span> <span class="hp">${p.name}</span> <span class="hdim">${p.desc}</span> ${bDesc}</div>` +
+      ` <span class="hl">sq</span> <span class="hv">${S.chessSize.toFixed(3)}</span>` +
+      ` <span class="hl">style</span> <span class="hv">${S.chessStyle === 0 ? 'Escape' : 'Position'}</span></div>` +
+      `<div><span class="hl">rot</span> <span class="hv">${rotStr}</span></div>` +
       `<div><span class="hfps">${fpsVal} fps</span> <span class="hdim">\u2014 press</span> <span class="hkey">H</span> <span class="hdim">for help</span></div>`;
     qBadge.textContent = '';
     return;
@@ -1678,10 +1732,14 @@ function updateHUD() {
   const modeClass = S.mode === '2d' ? 'm2d' : 'm3d';
   const fracLabel = S.fracType === 0 ? 'Complex z\u00B2+c' : 'Quat q\u00B2+c';
 
-  // Compact basis description
-  const bDesc = S.mode === '2d'
-    ? `<span class="hdim">\u2192${axisLabel(S.basis[0])} \u2191${axisLabel(S.basis[1])}</span>`
-    : `<span class="hdim">\u2192${axisLabel(S.basis[0])} \u2191${axisLabel(S.basis[1])} \u21A6${axisLabel(S.basis[2])}</span>`;
+  // Rotation angles for HUD
+  const toDeg = 180 / Math.PI;
+  let rotParts = [];
+  for (let i = 0; i < 6; i++) {
+    const deg = S.rotAngles[i] * toDeg;
+    if (Math.abs(deg) > 0.1) rotParts.push(`${PLANES[i].name}:${deg.toFixed(1)}\u00B0`);
+  }
+  const rotStr = rotParts.length ? rotParts.join(' ') : 'none';
 
   let posInfo;
   if (S.fracType === 0) {
@@ -1701,7 +1759,7 @@ function updateHUD() {
     `<div><span class="hl">zoom</span> <span class="hv">\u00D7${S.zoom < 1 ? S.zoom.toFixed(3) : S.zoom.toFixed(1)}</span>` +
     ` <span class="hl">iter</span> <span class="hv">${S.maxIter}</span>` +
     ` <span class="hl">pal</span> <span class="hv">${PAL_NAMES[S.palette]}</span></div>` +
-    `<div><span class="hl">rot</span> <span class="hp">${p.name}</span> <span class="hdim">${p.desc}</span> ${bDesc}</div>` +
+    `<div><span class="hl">rot</span> <span class="hv">${rotStr}</span></div>` +
     `<div><span class="hfps">${fpsVal} fps</span> <span class="hdim">\u2014 press</span> <span class="hkey">H</span> <span class="hdim">for help</span></div>`;
 
   if (S.mode === '3d') {
