@@ -12,6 +12,7 @@
 #include <cstring>
 #include <array>
 #include <algorithm>
+#include <vector>
 
 // =========================================================================
 // Shader sources
@@ -351,6 +352,10 @@ static constexpr int kNumPresets = sizeof(kPresets) / sizeof(kPresets[0]);
 static const char* kPalNames[] = {"Ocean", "Ember", "Ice", "Rainbow", "Mono"};
 static constexpr int kNumPalettes = 5;
 
+// Defaults for interactive mesh export ('O' key)
+static constexpr int   kMeshResDefault = 128;
+static constexpr float kMeshIsoDefault = 0.5f;
+
 // =========================================================================
 // Application state
 // =========================================================================
@@ -599,6 +604,189 @@ static void saveBMP(const char* path, int w, int h, const unsigned char* bgr) {
     }
     fclose(f);
     printf("Saved %s (%dx%d)\n", path, w, h);
+}
+
+// =========================================================================
+// Surface Nets mesh export (CPU)
+// =========================================================================
+//
+// Exports the *current* 3D Julia set as a quad mesh (Wavefront .obj) using
+// the Naive Surface Nets (dual contouring family) algorithm:
+//
+//   1. Sample the Julia "insideness" scalar field on a (res+1)^3 corner grid
+//      over the same [-2,2]^3 model-space box the ray-marcher uses.
+//   2. Place ONE smoothed vertex inside every cell whose 8 corners straddle
+//      the iso-level (average of the edge/iso crossing points).
+//   3. Emit a QUAD across every grid edge with a sign change, joining the 4
+//      cells that share that edge.
+//
+// Unlike Marching Cubes (triangles, vertices on edges), Surface Nets gives
+// quads with vertices in cell interiors, so the mesh is smoother and lighter.
+
+// Julia "insideness" scalar field at a 3D model-space point.
+// Returns the escape fraction in [0,1]: ~1 deep inside the set, ~0 far
+// outside. Mirrors juliaEscape() in the 3D fragment shader exactly.
+static float juliaFieldCPU(const AppState& s, float x, float y, float z);
+
+static bool exportSurfaceNets(const AppState& s, const char* path,
+                              int res, float iso) {
+    if (res < 2) res = 2;
+    const float lo = -2.0f, hi = 2.0f;
+    const int   N  = res;          // cells per axis
+    const int   NV = N + 1;        // grid samples per axis
+    const float h  = (hi - lo) / float(N);
+
+    auto FIDX = [NV](int i, int j, int k) {
+        return ((size_t)k * NV + j) * NV + i;
+    };
+    auto CIDX = [N](int i, int j, int k) {
+        return ((size_t)k * N + j) * N + i;
+    };
+
+    // ---- Sample scalar field on the corner grid ----
+    std::vector<float> field((size_t)NV * NV * NV);
+    for (int k = 0; k < NV; k++) {
+        float z = lo + h * k;
+        for (int j = 0; j < NV; j++) {
+            float y = lo + h * j;
+            for (int i = 0; i < NV; i++)
+                field[FIDX(i, j, k)] = juliaFieldCPU(s, lo + h * i, y, z);
+        }
+        if ((k % 16) == 0)
+            printf("  meshing: %d/%d slices\r", k, NV), fflush(stdout);
+    }
+    printf("  meshing: %d/%d slices\n", NV, NV);
+
+    // Cube corner offsets (corner 0 = min corner)
+    static const int corner[8][3] = {
+        {0,0,0},{1,0,0},{1,1,0},{0,1,0},
+        {0,0,1},{1,0,1},{1,1,1},{0,1,1}
+    };
+    // 12 cube edges as pairs of corner indices
+    static const int cedge[12][2] = {
+        {0,1},{1,2},{2,3},{3,0},
+        {4,5},{5,6},{6,7},{7,4},
+        {0,4},{1,5},{2,6},{3,7}
+    };
+
+    // ---- Pass 1: one vertex per surface-crossing cell ----
+    std::vector<int>   cellVert((size_t)N * N * N, -1);
+    std::vector<float> verts;  // flat xyz triplets
+
+    for (int k = 0; k < N; k++)
+    for (int j = 0; j < N; j++)
+    for (int i = 0; i < N; i++) {
+        float cval[8];
+        int   mask = 0;
+        for (int c = 0; c < 8; c++) {
+            float v = field[FIDX(i + corner[c][0], j + corner[c][1], k + corner[c][2])];
+            cval[c] = v;
+            if (v >= iso) mask |= (1 << c);   // inside
+        }
+        if (mask == 0 || mask == 255) continue;  // fully outside / inside
+
+        // Vertex = average of iso crossings on the 12 edges
+        float sx = 0, sy = 0, sz = 0; int cnt = 0;
+        for (int e = 0; e < 12; e++) {
+            int a = cedge[e][0], b = cedge[e][1];
+            if (((mask >> a) & 1) == ((mask >> b) & 1)) continue;
+            float va = cval[a], vb = cval[b];
+            float t  = (vb == va) ? 0.5f : (iso - va) / (vb - va);
+            sx += (i + corner[a][0]) + t * (corner[b][0] - corner[a][0]);
+            sy += (j + corner[a][1]) + t * (corner[b][1] - corner[a][1]);
+            sz += (k + corner[a][2]) + t * (corner[b][2] - corner[a][2]);
+            cnt++;
+        }
+        cellVert[CIDX(i, j, k)] = (int)(verts.size() / 3);
+        verts.push_back(lo + (sx / cnt) * h);
+        verts.push_back(lo + (sy / cnt) * h);
+        verts.push_back(lo + (sz / cnt) * h);
+    }
+
+    // ---- Pass 2: emit quads across sign-changing grid edges ----
+    // Strides of cellVert for +1 along each axis.
+    const int R[3] = {1, N, N * N};
+    std::vector<int> quads;  // 4 vertex indices per quad (0-based)
+
+    for (int k = 0; k < N; k++)
+    for (int j = 0; j < N; j++)
+    for (int i = 0; i < N; i++) {
+        int cc[3] = {i, j, k};
+        bool v0in = field[FIDX(i, j, k)] >= iso;   // sign of corner 0
+        for (int axis = 0; axis < 3; axis++) {
+            int di = (axis == 0), dj = (axis == 1), dk = (axis == 2);
+            bool vAin = field[FIDX(i + di, j + dj, k + dk)] >= iso;
+            if (v0in == vAin) continue;            // no crossing on this edge
+
+            int iu = (axis + 1) % 3, iv = (axis + 2) % 3;
+            if (cc[iu] == 0 || cc[iv] == 0) continue;   // needs 4 real cells
+
+            size_t m = CIDX(i, j, k);
+            int q0 = cellVert[m];
+            int q1 = cellVert[m - R[iu]];
+            int q2 = cellVert[m - R[iu] - R[iv]];
+            int q3 = cellVert[m - R[iv]];
+            if (q0 < 0 || q1 < 0 || q2 < 0 || q3 < 0) continue;
+
+            if (v0in) { quads.push_back(q0); quads.push_back(q1);
+                        quads.push_back(q2); quads.push_back(q3); }
+            else      { quads.push_back(q0); quads.push_back(q3);
+                        quads.push_back(q2); quads.push_back(q1); }
+        }
+    }
+
+    // ---- Write Wavefront .obj ----
+    FILE* f = fopen(path, "w");
+    if (!f) { fprintf(stderr, "Cannot write %s\n", path); return false; }
+    fprintf(f, "# 4D Julia Set - Surface Nets mesh (quads)\n");
+    fprintf(f, "# type=%s  iso=%.3f  res=%d  origin=%.4f,%.4f,%.4f,%.4f\n",
+            s.fracType ? "quaternion" : "complex", iso, res,
+            s.origin[0], s.origin[1], s.origin[2], s.origin[3]);
+    if (s.fracType)
+        fprintf(f, "# qc=%.4f,%.4f,%.4f,%.4f\n",
+                s.qc[0], s.qc[1], s.qc[2], s.qc[3]);
+    for (size_t v = 0; v < verts.size(); v += 3)
+        fprintf(f, "v %.6f %.6f %.6f\n", verts[v], verts[v+1], verts[v+2]);
+    for (size_t q = 0; q < quads.size(); q += 4)
+        fprintf(f, "f %d %d %d %d\n",
+                quads[q]+1, quads[q+1]+1, quads[q+2]+1, quads[q+3]+1);
+    fclose(f);
+
+    printf("Saved %s (%zu verts, %zu quads)\n",
+           path, verts.size() / 3, quads.size() / 4);
+    return true;
+}
+
+static float juliaFieldCPU(const AppState& s, float x, float y, float z) {
+    // Map 3D position to 4D via current basis (same as shader u_u/u_v/u_w).
+    float p0 = s.origin[0] + x*s.basis[0][0] + y*s.basis[1][0] + z*s.basis[2][0];
+    float p1 = s.origin[1] + x*s.basis[0][1] + y*s.basis[1][1] + z*s.basis[2][1];
+    float p2 = s.origin[2] + x*s.basis[0][2] + y*s.basis[1][2] + z*s.basis[2][2];
+    float p3 = s.origin[3] + x*s.basis[0][3] + y*s.basis[1][3] + z*s.basis[2][3];
+
+    int n = 0;
+    if (s.fracType == 0) {
+        // Complex: z -> z^2 + c, z=(p0,p1), c=(p2,p3)
+        float zr = p0, zi = p1, cr = p2, ci = p3;
+        for (; n < s.maxIter3d; n++) {
+            if (zr*zr + zi*zi > 4.0f) break;
+            float t = zr*zr - zi*zi + cr;
+            zi = 2.0f*zr*zi + ci;
+            zr = t;
+        }
+    } else {
+        // Quaternion: q -> q^2 + c, q=(p0..p3), c=s.qc
+        float a = p0, b = p1, c = p2, d = p3;
+        for (; n < s.maxIter3d; n++) {
+            if (a*a+b*b+c*c+d*d > 4.0f) break;
+            float na = a*a - b*b - c*c - d*d + s.qc[0];
+            float nb = 2.0f*a*b + s.qc[1];
+            float nc = 2.0f*a*c + s.qc[2];
+            float nd = 2.0f*a*d + s.qc[3];
+            a = na; b = nb; c = nc; d = nd;
+        }
+    }
+    return float(n) / float(s.maxIter3d);
 }
 
 static GLuint createQuadVAO() {
@@ -907,6 +1095,12 @@ static void keyCallback(GLFWwindow* win, int key, int /*scancode*/, int action, 
             else             s.maxIter3d = std::max(s.maxIter3d - 8, 16);
             break;
         case GLFW_KEY_H: break;
+        case GLFW_KEY_O:
+            // Export current 3D Julia as a Surface Nets quad mesh (.obj)
+            printf("Exporting mesh (res=%d, iso=%.2f)...\n",
+                   kMeshResDefault, kMeshIsoDefault);
+            exportSurfaceNets(s, "julia_mesh.obj", kMeshResDefault, kMeshIsoDefault);
+            break;
         case GLFW_KEY_ESCAPE: glfwSetWindowShouldClose(win, GLFW_TRUE); break;
         default: break;
     }
@@ -923,6 +1117,11 @@ int main(int argc, char** argv) {
     const char* saveFile = nullptr;
     int saveW = 800, saveH = 800;
     bool cliMode = false;
+
+    // Mesh export (Surface Nets -> .obj)
+    const char* meshFile = nullptr;
+    int   meshRes = kMeshResDefault;
+    float meshIso = kMeshIsoDefault;
 
     // Rotation angles to apply (degrees), in order: XY XR XI YR YI RI
     float cliRot[6] = {0,0,0,0,0,0};
@@ -961,6 +1160,9 @@ int main(int argc, char** argv) {
             sscanf(argv[++i], "%f,%f,%f,%f",
                    &cliState.qc[0], &cliState.qc[1], &cliState.qc[2], &cliState.qc[3]);
         }
+        else if (match("--mesh"))     meshFile = argv[++i];
+        else if (match("--mesh-res")) meshRes  = atoi(argv[++i]);
+        else if (match("--iso"))      meshIso  = (float)atof(argv[++i]);
         else if (strcmp(argv[i], "--help") == 0) {
             printf("Usage: julia4d [options]\n"
                    "  --save <file.bmp>     Render and save (headless)\n"
@@ -979,7 +1181,10 @@ int main(int argc, char** argv) {
                    "  --steps <n>           Ray march steps\n"
                    "  --cam-dist <f>        Camera distance\n"
                    "  --cam-theta <f>       Camera azimuth (rad)\n"
-                   "  --cam-phi <f>         Camera elevation (rad)\n");
+                   "  --cam-phi <f>         Camera elevation (rad)\n"
+                   "  --mesh <file.obj>     Export a Surface Nets quad mesh (headless)\n"
+                   "  --mesh-res <n>        Mesh grid resolution (cells/axis, default 128)\n"
+                   "  --iso <f>             Mesh iso-level, escape fraction 0-1 (default 0.5)\n");
             return 0;
         }
     }
@@ -993,6 +1198,15 @@ int main(int argc, char** argv) {
                 cliState.rotAngles[p] = rad;
             }
         }
+    }
+
+    // ----- Headless mesh export (pure CPU, no GL context needed) -----
+    if (meshFile) {
+        printf("Exporting Surface Nets mesh -> %s (res=%d, iso=%.3f, %s)\n",
+               meshFile, meshRes, meshIso,
+               cliState.fracType ? "quaternion" : "complex");
+        bool ok = exportSurfaceNets(cliState, meshFile, meshRes, meshIso);
+        return ok ? 0 : 1;
     }
 
     // ----- GLFW init -----

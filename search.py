@@ -1,12 +1,16 @@
 """
-Search for quaternion Julia parameters that best match a reference image.
+Search for Julia parameters that best match a reference image.
 
-Searches over quaternion c values and camera angles. Uses silhouette
+Searches over the fractal constant c and camera angles. Uses silhouette
 comparison (thresholded binary mask) so lighting/palette differences
 don't affect the match.
 
+Two calculation modes (select with --mode):
+    quat     quaternion Julia q -> q^2 + c, c is a 4-component constant (default)
+    complex  complex Julia   z -> z^2 + c, c = (cr, ci) is a 2-component constant
+
 Usage:
-    py -3.14 search.py <reference.jpg> <julia4d.exe>
+    py -3.14 search.py <reference.jpg> <julia4d.exe> [--mode complex|quat]
 """
 
 import sys, os, subprocess, struct, math, itertools
@@ -68,15 +72,22 @@ def similarity(a, b):
 
 
 def render(exe, outpath, qc, cam_theta=0.4, cam_phi=0.3, cam_dist=6.0,
-           w=200, h=200, palette=1, itr=48, steps=100):
-    """Render a quaternion Julia set and save to BMP."""
-    cmd = [exe, '--quat', '--save', outpath,
+           w=200, h=200, palette=1, itr=48, steps=100, mode='quat'):
+    """Render a Julia set (complex or quaternion) and save to BMP.
+
+    `qc` is always a 4-tuple. In complex mode only the first two
+    components are used as the complex constant c = (cr, ci).
+    """
+    cmd = [exe, '--save', outpath,
            '--width', str(w), '--height', str(h),
-           '--qc', f'{qc[0]},{qc[1]},{qc[2]},{qc[3]}',
            '--palette', str(palette), '--iter', str(itr), '--steps', str(steps),
            '--cam-theta', f'{cam_theta:.3f}',
            '--cam-phi', f'{cam_phi:.3f}',
            '--cam-dist', f'{cam_dist:.1f}']
+    if mode == 'complex':
+        cmd += ['--c', f'{qc[0]},{qc[1]}']
+    else:
+        cmd += ['--quat', '--qc', f'{qc[0]},{qc[1]},{qc[2]},{qc[3]}']
     try:
         subprocess.run(cmd, capture_output=True, timeout=30)
     except Exception as e:
@@ -84,17 +95,37 @@ def render(exe, outpath, qc, cam_theta=0.4, cam_phi=0.3, cam_dist=6.0,
 
 
 def main():
-    if len(sys.argv) < 3:
-        print(f"Usage: {sys.argv[0]} <reference_image> <julia4d_exe>")
+    # Parse optional --mode flag out of argv, leaving positional args intact
+    args = sys.argv[1:]
+    mode = 'quat'
+    filtered = []
+    i = 0
+    while i < len(args):
+        if args[i] == '--mode' and i + 1 < len(args):
+            mode = args[i + 1].lower()
+            i += 2
+            continue
+        filtered.append(args[i])
+        i += 1
+    # Accept common aliases
+    if mode in ('quaternion', 'quad'):
+        mode = 'quat'
+    if mode not in ('complex', 'quat'):
+        print(f"Unknown --mode '{mode}' (use 'complex' or 'quat')")
         sys.exit(1)
 
-    ref_path = sys.argv[1]
-    exe_path = sys.argv[2]
+    if len(filtered) < 2:
+        print(f"Usage: {sys.argv[0]} <reference_image> <julia4d_exe> [--mode complex|quat]")
+        sys.exit(1)
+
+    ref_path = filtered[0]
+    exe_path = filtered[1]
     tmp = Path("search_output")
     tmp.mkdir(exist_ok=True)
 
     print(f"Reference: {ref_path}")
     print(f"Executable: {exe_path}")
+    print(f"Mode: {mode}")
 
     ref = load_silhouette(ref_path)
     best_score = -1.0
@@ -104,7 +135,7 @@ def main():
         nonlocal best_score, best_params
         fname = f"{label}.bmp"
         fpath = str(tmp / fname)
-        render(exe_path, fpath, qc, theta, phi, dist)
+        render(exe_path, fpath, qc, theta, phi, dist, mode=mode)
         if not os.path.exists(fpath):
             return -1.0
         test = load_silhouette(fpath)
@@ -133,28 +164,31 @@ def main():
             try_render(f"p1_ab_{count}", qc)
             count += 1
 
-    # Try c = (a, 0, b, 0)
-    for a in [x * 0.1 for x in range(-15, 16)]:
-        for b in [x * 0.1 for x in range(-15, 16)]:
-            if a*a + b*b > 2.25: continue
-            qc = (a, 0.0, b, 0.0)
-            try_render(f"p1_ac_{count}", qc)
-            count += 1
+    # Quaternion has 4 c-components; complex only uses (cr, ci), so these
+    # extra sweeps over the 3rd/4th component only apply to quaternion mode.
+    if mode != 'complex':
+        # Try c = (a, 0, b, 0)
+        for a in [x * 0.1 for x in range(-15, 16)]:
+            for b in [x * 0.1 for x in range(-15, 16)]:
+                if a*a + b*b > 2.25: continue
+                qc = (a, 0.0, b, 0.0)
+                try_render(f"p1_ac_{count}", qc)
+                count += 1
 
-    # Try c = (a, 0, 0, b)
-    for a in [x * 0.1 for x in range(-15, 16)]:
-        for b in [x * 0.1 for x in range(-15, 16)]:
-            if a*a + b*b > 2.25: continue
-            qc = (a, 0.0, 0.0, b)
-            try_render(f"p1_ad_{count}", qc)
-            count += 1
+        # Try c = (a, 0, 0, b)
+        for a in [x * 0.1 for x in range(-15, 16)]:
+            for b in [x * 0.1 for x in range(-15, 16)]:
+                if a*a + b*b > 2.25: continue
+                qc = (a, 0.0, 0.0, b)
+                try_render(f"p1_ad_{count}", qc)
+                count += 1
 
     print(f"\nPhase 1: {count} renders. Best IoU = {best_score:.4f}")
     if best_params:
         print(f"  qc = ({best_params['qc'][0]:.3f}, {best_params['qc'][1]:.3f}, "
               f"{best_params['qc'][2]:.3f}, {best_params['qc'][3]:.3f})")
 
-    if best_score < 0.01:
+    if best_score < 0.01 and mode != 'complex':
         print("\nPhase 1 found nothing. Trying all 4-component combinations (coarser)...")
         for a in [x * 0.2 for x in range(-7, 8)]:
             for b in [x * 0.2 for x in range(-7, 8)]:
@@ -224,13 +258,17 @@ def main():
     # Result
     # ═══════════════════════════════════════════════════════════
     bp = best_params
+    if mode == 'complex':
+        const_flag = f"--c {bp['qc'][0]:.4f},{bp['qc'][1]:.4f}"
+    else:
+        const_flag = (f"--quat --qc {bp['qc'][0]:.4f},{bp['qc'][1]:.4f},"
+                      f"{bp['qc'][2]:.4f},{bp['qc'][3]:.4f}")
     print(f"\n{'='*60}")
     print(f"BEST MATCH (IoU = {bp['score']:.4f}):")
-    print(f"  --quat --qc {bp['qc'][0]:.4f},{bp['qc'][1]:.4f},{bp['qc'][2]:.4f},{bp['qc'][3]:.4f}")
+    print(f"  {const_flag}")
     print(f"  --cam-theta {bp['theta']:.3f} --cam-phi {bp['phi']:.3f} --cam-dist {bp['dist']:.1f}")
     print(f"\nFull render command:")
-    print(f"  {exe_path} --quat"
-          f" --qc {bp['qc'][0]:.4f},{bp['qc'][1]:.4f},{bp['qc'][2]:.4f},{bp['qc'][3]:.4f}"
+    print(f"  {exe_path} {const_flag}"
           f" --cam-theta {bp['theta']:.3f} --cam-phi {bp['phi']:.3f}"
           f" --palette 1 --iter 80 --steps 200"
           f" --save best_match.bmp --width 1024 --height 1024")

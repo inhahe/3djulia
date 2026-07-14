@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>4D Julia Set Explorer</title>
 <style>
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -60,6 +60,8 @@ body { background: #060610; color: #bbb; font-family: 'Consolas', 'Menlo', 'Mona
 #presets button:hover { background: #2a2a4e; color: #def; border-color: #556; }
 #presets button.qp { border-color: #424; color: #a7a; }
 #presets button.qp:hover { background: #2e1a3e; color: #e8d; border-color: #648; }
+#presets button.mp { border-color: #244; color: #7aa; }
+#presets button.mp:hover { background: #1a2e2e; color: #cff; border-color: #488; }
 
 /* ── Quality badge ── */
 #quality-badge { position: fixed; bottom: 12px; right: 14px; font-size: 11px; color: #889;
@@ -138,6 +140,63 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: #
 .rst { width: 100%; padding: 5px; border: 1px solid #223; background: #0d0d1a; color: #778;
        border-radius: 4px; cursor: pointer; font: inherit; font-size: 11px; transition: all .12s; }
 .rst:hover { background: #1a1020; color: #f88; border-color: #633; }
+
+/* ── Mobile FABs: expand-controls (top-right), info + presets (bottom) ── */
+#panel-fab { display: none; position: fixed; top: 8px; right: 10px; z-index: 20;
+  width: 42px; height: 42px; align-items: center; justify-content: center;
+  background: rgba(6,6,16,.92); color: #cde; border: 1px solid #334; border-radius: 9px;
+  font-size: 18px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+#hud-fab, #presets-fab { display: none; position: fixed; z-index: 20;
+  align-items: center; justify-content: center; gap: 6px;
+  background: rgba(6,6,16,.92); color: #cde; border: 1px solid #334; border-radius: 9px;
+  cursor: pointer; -webkit-tap-highlight-color: transparent; font: inherit; }
+#hud-fab { bottom: 12px; right: 14px; width: 42px; height: 42px; font-size: 17px; font-style: italic; font-weight: bold; }
+#presets-fab { bottom: 12px; left: 14px; height: 42px; padding: 0 15px; font-size: 13px; }
+
+@media (max-width: 820px), (pointer: coarse) {
+  #panel-fab, #hud-fab, #presets-fab { display: flex; }
+
+  /* Control pane pinned as a full-width bar at the TOP; the julia shows below /
+     around it. Collapsed by default to just view/fractal modes + sliders. */
+  #panel {
+    top: 0; left: 0; right: 0; bottom: auto;
+    width: 100%; height: auto; max-height: 46vh; max-width: none;
+    border-radius: 0 0 12px 12px; border-top: none; border-left: none; border-right: none;
+    padding: 10px 58px 10px 12px;
+    transform: none;
+    box-shadow: 0 6px 22px rgba(0,0,0,.55);
+  }
+  /* Advanced sections (rotation, movement, view controls, reset) stay hidden
+     until the user expands the pane. */
+  #panel .panel-adv { display: none; }
+  body.panel-open #panel { max-height: calc(100dvh - 16px); }
+  body.panel-open #panel .panel-adv { display: block; }
+  body.panel-open #panel-fab { background: #1a1a3a; color: #eef; }
+
+  /* Larger touch targets inside the pane */
+  .mbtn { padding: 10px 0; } .fbtn { padding: 9px 0; } .pbtn { padding: 8px 0; }
+  .abtn { padding: 8px 2px; } .cbtn { height: 30px; }
+  input[type="range"] { height: 22px; }
+  input[type="range"]::-webkit-slider-thumb { width: 16px; height: 22px; }
+  input[type="range"]::-moz-range-thumb { width: 16px; height: 22px; }
+
+  /* HUD info: collapsed behind the bottom-right ⓘ button; expands as a card. */
+  #hud { display: none; top: auto; left: auto; right: 14px; bottom: 62px; z-index: 19;
+         pointer-events: auto; max-width: min(80vw, 320px); }
+  body.hud-open #hud { display: block; }
+  body.hud-open #hud-fab { background: #1a1a3a; color: #eef; }
+
+  /* Presets: collapsed behind the bottom-left button; expand as a scroll row. */
+  #presets { display: none; bottom: 62px; left: 14px; right: 14px; max-width: none;
+    flex-wrap: nowrap; overflow-x: auto; padding-bottom: 3px;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none; z-index: 19; }
+  #presets::-webkit-scrollbar { display: none; }
+  body.presets-open #presets { display: flex; }
+  body.presets-open #presets-fab { background: #1a1a3a; color: #eef; }
+  #presets button { flex: 0 0 auto; padding: 7px 12px; font-size: 12px; }
+
+  #quality-badge { display: none; }
+}
 </style>
 </head>
 <body>
@@ -185,6 +244,7 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: #
   </p>
 </div>
 
+<button id="panel-fab" aria-label="Show more controls" aria-expanded="false">&#9662;</button>
 <div id="panel">
   <!-- Mode -->
   <div class="ps">
@@ -202,11 +262,12 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: #
     <div class="mrow">
       <button class="fbtn sel" data-ft="0">Complex z&sup2;+c</button>
       <button class="fbtn" data-ft="1">Quat q&sup2;+c</button>
+      <button class="fbtn" data-ft="2">Mandelbulb</button>
     </div>
   </div>
   <!-- Quaternion c (hidden when complex) -->
   <div class="ps" id="quat-section" style="display:none">
-    <div class="pl">Quaternion c</div>
+    <div class="pl" id="quat-label">Quaternion c</div>
     <div class="srow">
       <span class="slbl">a</span>
       <input type="range" class="qc-slider" data-qci="0" min="-1.5" max="1.5" step="0.01" value="-0.2">
@@ -229,7 +290,7 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: #
     </div>
   </div>
   <!-- 4D Rotation -->
-  <div class="ps" id="rotation-section">
+  <div class="ps panel-adv" id="rotation-section">
     <div class="pl">4D Rotation Plane</div>
     <div class="pgrid">
       <button class="pbtn sel" data-pl="0">X&ndash;Y<small>z-plane</small></button>
@@ -246,7 +307,7 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: #
     <div id="pv-basis" style="font-size:11px;color:#bcd;padding:4px 6px;line-height:1.5;background:rgba(255,255,255,0.04);border-radius:3px;margin-top:4px"></div>
   </div>
   <!-- Movement -->
-  <div class="ps">
+  <div class="ps panel-adv">
     <div class="pl">Move (Screen)</div>
     <div class="prow">
       <button class="abtn" data-act="left">&larr; Left</button>
@@ -267,7 +328,7 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: #
     </div>
   </div>
   <!-- View -->
-  <div class="ps">
+  <div class="ps panel-adv">
     <div class="pl">View Controls</div>
     <div class="crow">
       <span class="clbl">Zoom</span>
@@ -313,7 +374,7 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: #
     </div>
   </div>
   <!-- Reset / Help -->
-  <div class="ps">
+  <div class="ps panel-adv">
     <div class="prow">
       <button class="rst" data-act="reset">Reset View</button>
       <button class="rst" data-act="help">Help (H)</button>
@@ -334,9 +395,15 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: #
   <button data-p="q_filigree" class="qp">Q: Filigree</button>
   <button data-p="q_rabbit" class="qp">Q: Rabbit</button>
   <button data-p="q_spiral" class="qp">Q: Spiral</button>
+  <button data-p="mandelbulb" class="mp">Mandelbulb</button>
+  <button data-p="julia_bulb" class="mp">Julia Bulb</button>
 </div>
 
 <div id="quality-badge"></div>
+
+<!-- Mobile-only FABs: expand the HUD info / preset row (hidden on desktop) -->
+<button id="hud-fab" aria-label="Toggle info" aria-expanded="false">i</button>
+<button id="presets-fab" aria-label="Toggle presets" aria-expanded="false">&#10022; Presets</button>
 
 <!-- ─── Three.js via CDN ─── -->
 <script type="importmap">
@@ -379,6 +446,9 @@ const PRESETS = {
   q_filigree:  { o:[0,0,0,0], qc:[-0.45, 0.65, 0, 0],   fracType:1, label:'Q: Filigree' },
   q_rabbit:    { o:[0,0,0,0], qc:[-0.1, 0.75, 0, 0],     fracType:1, label:'Q: Rabbit' },
   q_spiral:    { o:[0,0,0,0], qc:[-0.2, 0.6, 0.2, 0.2], fracType:1, label:'Q: Spiral' },
+  // Mandelbulb presets (3D only)
+  mandelbulb:  { o:[0,0,0,0], qc:[0, 0, 0, 0],        fracType:2, mode:'3d', label:'Mandelbulb' },
+  julia_bulb:  { o:[0,0,0,0], qc:[0.35, 0.1, -0.2, 0], fracType:2, mode:'3d', label:'Julia Bulb' },
 };
 
 const PAL_NAMES = ['Ocean','Ember','Ice','Rainbow','Mono'];
@@ -992,7 +1062,7 @@ float juliaEscape(vec3 pos) {
             zr = t;
             n++;
         }
-    } else {
+    } else if (u_fracType == 1) {
         float a = p4.x, b = p4.y, c = p4.z, d = p4.w;
         for (int j = 0; j < 256; j++) {
             if (j >= maxIt) break;
@@ -1002,6 +1072,22 @@ float juliaEscape(vec3 pos) {
             float nc = 2.0*a*c + u_qc.z;
             float nd = 2.0*a*d + u_qc.w;
             a = na; b = nb; c = nc; d = nd;
+            n++;
+        }
+    } else {
+        // Mandelbulb (power 8): true 3D fractal in raw world coords.
+        // c = pos + u_qc.xyz  (qc=0 -> classic centered bulb; qc!=0 -> Julia bulb)
+        vec3 w = pos;
+        vec3 cc = pos + u_qc.xyz;
+        for (int j = 0; j < 256; j++) {
+            if (j >= maxIt) break;
+            float r = max(length(w), 1e-9);
+            if (r > 2.0) break;
+            float theta = acos(clamp(w.z / r, -1.0, 1.0)) * 8.0;
+            float phi   = atan(w.y, w.x) * 8.0;
+            float rp    = pow(r, 8.0);
+            float st    = sin(theta);
+            w = rp * vec3(st*cos(phi), st*sin(phi), cos(theta)) + cc;
             n++;
         }
     }
@@ -1032,7 +1118,7 @@ float juliaDist(vec3 pos) {
             zr = nz;
         }
         return 0.0;
-    } else {
+    } else if (u_fracType == 1) {
         // Quaternion distance estimator: d = |q| * ln|q| / |dq|
         // dq' = 2 * q * dq (quaternion multiply), dq_0 = (1,0,0,0)
         float a = p4.x, b = p4.y, c = p4.z, d = p4.w;
@@ -1059,6 +1145,23 @@ float juliaDist(vec3 pos) {
             a = na; b = nb; c = nc; d = nd;
         }
         return 0.0;
+    } else {
+        // Mandelbulb distance estimator (power 8)
+        vec3 w = pos;
+        vec3 cc = pos + u_qc.xyz;
+        float dr = 1.0, r = 0.0;
+        for (int j = 0; j < 256; j++) {
+            if (j >= maxIt) break;
+            r = max(length(w), 1e-9);
+            if (r > 2.0) break;
+            float theta = acos(clamp(w.z / r, -1.0, 1.0)) * 8.0;
+            float phi   = atan(w.y, w.x) * 8.0;
+            dr = pow(r, 7.0) * 8.0 * dr + 1.0;
+            float rp = pow(r, 8.0);
+            float st = sin(theta);
+            w = rp * vec3(st*cos(phi), st*sin(phi), cos(theta)) + cc;
+        }
+        return 0.5 * log(r) * r / dr;
     }
 }
 
@@ -1321,7 +1424,7 @@ document.addEventListener('keydown', e => {
       setMode(S.mode === '2d' ? '2di' : S.mode === '2di' ? '2dc' : S.mode === '2dc' ? '3d' : '2d');
       break;
     case 'f': case 'F':
-      S.fracType = S.fracType === 0 ? 1 : 0;
+      setFracType((S.fracType + 1) % 3);
       break;
     case 'r': case 'R': resetView(); break;
     case 'c': case 'C': S.palette = (S.palette + 1) % PAL_NAMES.length; break;
@@ -1386,23 +1489,35 @@ c2d.addEventListener('wheel', e => {
 // ── Touch (2D mode) ──
 
 let tCache = [], prevPinch = 0;
+const isTouch2D = () => S.mode === '2d' || S.mode === '2dc' || S.mode === '2di';
 c2d.addEventListener('touchstart', e => {
-  if (S.mode !== '2d' && S.mode !== '2dc') return;
+  if (!isTouch2D()) return;
   e.preventDefault();
   tCache = [...e.touches];
+  if (S.mode === '2di' && tCache.length === 1) {
+    // Drag the finger to steer the z₀ seed
+    S.mouseScreenX = tCache[0].clientX;
+    S.mouseScreenY = tCache[0].clientY;
+  }
   if (tCache.length === 2)
     prevPinch = Math.hypot(tCache[1].clientX-tCache[0].clientX, tCache[1].clientY-tCache[0].clientY);
 }, { passive: false });
 
 c2d.addEventListener('touchmove', e => {
-  if (S.mode !== '2d' && S.mode !== '2dc') return;
+  if (!isTouch2D()) return;
   e.preventDefault();
   if (e.touches.length === 1 && tCache.length >= 1) {
-    const dx = e.touches[0].clientX - tCache[0].clientX;
-    const dy = e.touches[0].clientY - tCache[0].clientY;
-    const sc = 2 / S.zoom / Math.min(c2d.clientWidth, c2d.clientHeight);
-    trans4(S.origin, S.basis, 0, -dx * sc);
-    trans4(S.origin, S.basis, 1,  dy * sc);
+    if (S.mode === '2di') {
+      // Single finger sets the Julia seed position
+      S.mouseScreenX = e.touches[0].clientX;
+      S.mouseScreenY = e.touches[0].clientY;
+    } else {
+      const dx = e.touches[0].clientX - tCache[0].clientX;
+      const dy = e.touches[0].clientY - tCache[0].clientY;
+      const sc = 2 / S.zoom / Math.min(c2d.clientWidth, c2d.clientHeight);
+      trans4(S.origin, S.basis, 0, -dx * sc);
+      trans4(S.origin, S.basis, 1,  dy * sc);
+    }
   } else if (e.touches.length === 2) {
     const d = Math.hypot(e.touches[1].clientX-e.touches[0].clientX,
                          e.touches[1].clientY-e.touches[0].clientY);
@@ -1413,6 +1528,34 @@ c2d.addEventListener('touchmove', e => {
 }, { passive: false });
 
 c2d.addEventListener('touchend', e => { tCache = [...e.touches]; prevPinch = 0; });
+
+// ── Mobile: expand/collapse the control pane, plus info & preset FABs ──
+const panelFab = document.getElementById('panel-fab');
+if (panelFab) {
+  const setExpanded = open => {
+    document.body.classList.toggle('panel-open', open);
+    panelFab.setAttribute('aria-expanded', open ? 'true' : 'false');
+    panelFab.setAttribute('aria-label', open ? 'Show fewer controls' : 'Show more controls');
+    panelFab.innerHTML = open ? '&#9652;' : '&#9662;';   // ▴ / ▾
+  };
+  panelFab.addEventListener('click', () =>
+    setExpanded(!document.body.classList.contains('panel-open')));
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.body.classList.contains('panel-open')) setExpanded(false);
+  });
+}
+// Info overlay: collapsed behind a small ⓘ button that toggles the HUD card.
+const hudFab = document.getElementById('hud-fab');
+if (hudFab) hudFab.addEventListener('click', () => {
+  const on = document.body.classList.toggle('hud-open');
+  hudFab.setAttribute('aria-expanded', on ? 'true' : 'false');
+});
+// Presets: collapsed behind a single button that expands the scroll row.
+const presetsFab = document.getElementById('presets-fab');
+if (presetsFab) presetsFab.addEventListener('click', () => {
+  const on = document.body.classList.toggle('presets-open');
+  presetsFab.setAttribute('aria-expanded', on ? 'true' : 'false');
+});
 
 // ── Control Panel ──
 
@@ -1474,7 +1617,7 @@ panelEl.addEventListener('pointerdown', e => {
   // Mode toggle
   if (btn.dataset.mode) { setMode(btn.dataset.mode); return; }
   // Fractal type toggle
-  if (btn.dataset.ft !== undefined) { S.fracType = parseInt(btn.dataset.ft); return; }
+  if (btn.dataset.ft !== undefined) { setFracType(parseInt(btn.dataset.ft)); return; }
   // Plane select
   if (btn.dataset.pl !== undefined) { S.plane = parseInt(btn.dataset.pl); return; }
   // Action
@@ -1510,6 +1653,7 @@ const mBtns  = panelEl.querySelectorAll('.mbtn');
 const pBtns  = panelEl.querySelectorAll('.pbtn');
 const fBtns  = panelEl.querySelectorAll('.fbtn');
 const quatSection = document.getElementById('quat-section');
+const quatLabel = document.getElementById('quat-label');
 const pvChessRow = document.getElementById('pv-chess-row');
 const pvChess = document.getElementById('pv-chess');
 const pvChessStyleRow = document.getElementById('pv-chess-style-row');
@@ -1554,8 +1698,9 @@ function updatePanel() {
     }
     pvBasis.innerHTML = bHtml;
   }
-  // Quaternion c section
-  quatSection.style.display = (!is2di && S.fracType === 1) ? '' : 'none';
+  // Quaternion c / Mandelbulb Julia-c section
+  quatSection.style.display = (!is2di && (S.fracType === 1 || S.fracType === 2)) ? '' : 'none';
+  if (quatLabel) quatLabel.textContent = S.fracType === 2 ? 'Mandelbulb Julia c (x,y,z)' : 'Quaternion c';
   if (!is2di) {
     for (let i = 0; i < 4; i++) {
       qcValEls[i].textContent = S.qc[i].toFixed(2);
@@ -1582,12 +1727,28 @@ document.querySelectorAll('#presets button').forEach(btn => {
     if (p.qc) {
       S.qc = [...p.qc];
     }
+    if (p.mode) setMode(p.mode);
+    // On mobile, collapse the presets row once a choice is made.
+    document.body.classList.remove('presets-open');
+    const pf = document.getElementById('presets-fab');
+    if (pf) pf.setAttribute('aria-expanded', 'false');
   });
 });
 
 // ── Helpers ──
 
+function setFracType(ft) {
+  S.fracType = ft;
+  if (ft === 2) {
+    // Mandelbulb is a true 3D fractal — only meaningful in the 3D volume renderer.
+    S.qc = [0, 0, 0, 0];        // start as the classic centered bulb
+    if (S.mode !== '3d') setMode('3d');
+  }
+}
+
 function setMode(m) {
+  // Mandelbulb has no 2D cross-section form — fall back to quaternion in 2D modes.
+  if (S.fracType === 2 && m !== '3d') S.fracType = 1;
   S.mode = m;
   const is2d  = (m === '2d');
   const is2di = (m === '2di');
@@ -1730,7 +1891,7 @@ function updateHUD() {
   const o = S.origin;
   const p = PLANES[S.plane];
   const modeClass = S.mode === '2d' ? 'm2d' : 'm3d';
-  const fracLabel = S.fracType === 0 ? 'Complex z\u00B2+c' : 'Quat q\u00B2+c';
+  const fracLabel = S.fracType === 0 ? 'Complex z\u00B2+c' : S.fracType === 1 ? 'Quat q\u00B2+c' : 'Mandelbulb (pow 8)';
 
   // Rotation angles for HUD
   const toDeg = 180 / Math.PI;
@@ -1746,10 +1907,15 @@ function updateHUD() {
     posInfo =
       `<div><span class="hl">z\u2080 =</span> <span class="hv">${f4(o[0])} ${o[1]<0?'\u2212':'+'}${f4(Math.abs(o[1]))}i</span></div>` +
       `<div><span class="hl">c&nbsp; =</span> <span class="hv">${f4(o[2])} ${o[3]<0?'\u2212':'+'}${f4(Math.abs(o[3]))}i</span></div>`;
-  } else {
+  } else if (S.fracType === 1) {
     posInfo =
       `<div><span class="hl">q =</span> <span class="hv">(${f4(o[0])}, ${f4(o[1])}, ${f4(o[2])}, ${f4(o[3])})</span></div>` +
       `<div><span class="hl">c =</span> <span class="hv">(${S.qc[0].toFixed(2)}, ${S.qc[1].toFixed(2)}, ${S.qc[2].toFixed(2)}, ${S.qc[3].toFixed(2)})</span></div>`;
+  } else {
+    const isJulia = (S.qc[0] || S.qc[1] || S.qc[2]);
+    posInfo =
+      `<div><span class="hl">type =</span> <span class="hv">${isJulia ? 'Julia bulb' : 'classic bulb'}</span></div>` +
+      `<div><span class="hl">c =</span> <span class="hv">(${S.qc[0].toFixed(2)}, ${S.qc[1].toFixed(2)}, ${S.qc[2].toFixed(2)})</span></div>`;
   }
 
   hudEl.innerHTML =
