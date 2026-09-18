@@ -1,0 +1,18 @@
+# We publish straight from this directory now instead of copying an allowlisted
+# subset into D:\github. cptogithub.bat was an explicit allowlist, so this is
+# ignore-everything plus anchored re-allows. This directory also holds thousands
+# of research artefacts (sweep renders, close_matches/, bulb_out/, *.png/.bmp),
+# scratch scripts and .orchestrator_history -- none of which were ever published.
+
+*
+
+!/.gitignore
+!/LICENSE
+!/README.md
+!/CMakeLists.txt
+!/imgui.ini
+!/julia4d.html
+!/julia4d.py
+!/main.cpp
+!/requirements.txt
+!/search.py
