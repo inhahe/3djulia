@@ -1,6 +1,6 @@
 # 4D Julia Set Explorer
 
-**[Live Demo](http://inhahe.com/julia4d.html)** — try it in your browser (WebGL2)
+**[Live Demo](https://inhahe.github.io/3djulia/julia4d.html)** — try it in your browser (WebGL2)
 
 Interactive real-time explorer for 4-dimensional Julia sets, with GPU ray-marched 3D volume rendering and full 4D rotation controls.
 
